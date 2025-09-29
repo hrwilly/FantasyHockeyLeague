@@ -3,8 +3,8 @@ from supabase import create_client
 import streamlit as st
 import pandas as pd
 
-url = st.secrets["https://gfhcikfciwaepodjxvlt.supabase.co"]
-key = st.secrets["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmaGNpa2ZjaXdhZXBvZGp4dmx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNzg1ODUsImV4cCI6MjA3NDc1NDU4NX0.vH7BZAbKaTSj1bOAebNvuiWjAtu9cbPZ2skq5cYHiqM"]
+url = st.secrets["SUPABASE_URL"]
+key = st.secrets["SUPABASE_KEY"]
 supabase = create_client(url, key)
 
 def load_players():
