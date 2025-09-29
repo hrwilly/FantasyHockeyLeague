@@ -126,9 +126,13 @@ available_players_team = available_players[available_players.apply(can_draft_pla
 # --- Draft Controls ---
 st.subheader("Draft Controls")
 
+# Persistent button state
+if "draft_triggered" not in st.session_state:
+    st.session_state.draft_triggered = False
+
 if selected_team == current_team:
     if not available_players_team.empty:
-        available_players_team = available_players_team.copy()
+        # Labels: "Name — Pos — Team"
         available_players_team["label"] = available_players_team.apply(
             lambda row: f"{row['Name']} — {row['Pos.']} — {row['team']}", axis=1
         )
@@ -139,17 +143,20 @@ if selected_team == current_team:
             options=available_players_team["label"].tolist(),
             key="player_select_dropdown"
         )
-
         chosen_player = label_to_name[selected_label]
 
         if st.button("Draft Player", key="draft_player_button"):
+            st.session_state.draft_triggered = True
+
+        # Handle draft action
+        if st.session_state.draft_triggered:
             players.loc[players["Name"] == chosen_player, "Pick_Number"] = st.session_state.pick_number
             players.loc[players["Name"] == chosen_player, "drafted_by"] = selected_team
             st.session_state.pick_number += 1
 
             db_utils.save_players(players)
             st.success(f"{selected_team} drafted {chosen_player}!")
-            # No experimental_rerun; refresh handled by st_autorefresh
+            st.session_state.draft_triggered = False
     else:
         st.info("Roster is full. You cannot draft more players.")
 else:
@@ -160,9 +167,9 @@ st.subheader("My Roster")
 roster_rows = []
 for pos, slots in roster_template.items():
     for _ in range(slots):
-        roster_rows.append({"Pos.": pos, "Name": "---", "team": "---", "Yr." : "---", "Ht.": "---", "Wt.": "---", "YOB": "---", "Hometown": "---"})
+        roster_rows.append({"Pos.": pos, "Name": "---", "team": "---", "Yr." : "---", "Ht.": "---", "Wt.": "---", "YOB": "---", "Hometown": "---", "Last Team" : "---", "Draft Year" : "---", "Draft Team" : "---", "Draft Round" : "---"})
 for _ in range(num_bench):
-    roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---", "Yr." : "---", "Ht.": "---", "Wt.": "---", "YOB": "---", "Hometown": "---"})
+    roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---", "Yr." : "---", "Ht.": "---", "Wt.": "---", "YOB": "---", "Hometown": "---", "Last Team" : "---", "Draft Year" : "---", "Draft Team" : "---", "Draft Round" : "---"})
 
 my_roster = pd.DataFrame(roster_rows)
 pos_counts = {pos: 0 for pos in roster_template.keys()}
@@ -171,13 +178,13 @@ for _, row in my_team_players.iterrows():
     pos = row["Pos."]
     if pos in roster_template and pos_counts[pos] < roster_template[pos]:
         index = sum([roster_template[p] for p in roster_template if list(roster_template.keys()).index(p) < list(roster_template.keys()).index(pos)]) + pos_counts[pos]
-        my_roster.loc[index, ["Name", "team", "Yr.", "Ht.", "Wt.", "YOB", "Hometown"]] = row[["Name", "team", "Yr.", "Ht.", "Wt.", "YOB", "Hometown"]]
+        my_roster.loc[index, ["Name", "team", "Yr.", "Ht.", "Wt.", "YOB", "Hometown", "Last Team", "Draft Year", "Draft Team", "Draft Round"]] = row[["Name", "team", "Yr.", "Ht.", "Wt.", "YOB", "Hometown", "Last Team", "Draft Year", "Draft Team", "Draft Round"]]
         pos_counts[pos] += 1
     else:
         for i in range(len(my_roster)):
             if my_roster.loc[i, "Pos."].startswith("Bench") and my_roster.loc[i, "Name"] == "---":
                 my_roster.loc[i, "Pos."] = f"Bench - {pos}"
-                my_roster.loc[i, ["Name", "team", "Yr.", "Ht.", "Wt.", "YOB", "Hometown"]] = row[["Name", "team", "Yr.", "Ht.", "Wt.", "YOB", "Hometown"]]
+                my_roster.loc[i, ["Name", "team", "Yr.", "Ht.", "Wt.", "YOB", "Hometown", "Last Team", "Draft Year", "Draft Team", "Draft Round"]] = row[["Name", "team", "Yr.", "Ht.", "Wt.", "YOB", "Hometown", "Last Team", "Draft Year", "Draft Team", "Draft Round"]]
                 break
 
 st.table(my_roster)
