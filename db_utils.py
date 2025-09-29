@@ -7,17 +7,6 @@ url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
 supabase = create_client(url, key)
 
-def load_players():
-    response = supabase.table("players").select("*").execute()
-    return pd.DataFrame(response.data)
-
-def save_players(df):
-    # For simplicity, delete all and reinsert
-    # (you can optimize this to use updates)
-    supabase.table("players").delete().neq("id", 0).execute()
-    data = df.to_dict(orient="records")
-    supabase.table("players").insert(data).execute()
-
 def get_team_by_name(team_name: str):
     """Return team row if it exists, otherwise None."""
     response = supabase.table("teams").select("*").eq("team_name", team_name).execute()
@@ -33,6 +22,14 @@ def add_team(team_name: str, manager: str):
     }).execute()
 
 def load_teams():
-    """Load all teams into a list of dicts (or you can convert to DataFrame)."""
-    response = supabase.table("teams").select("*").execute()
-    return response.data
+    res = supabase.table("teams").select("*").execute()
+    return pd.DataFrame(res.data)
+
+def load_players():
+    res = supabase.table("players").select("*").execute()
+    return pd.DataFrame(res.data)
+
+def save_players(df):
+    # Upsert all rows back to Supabase
+    for _, row in df.iterrows():
+        supabase.table("players").upsert(row.to_dict()).execute()
