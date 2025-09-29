@@ -92,7 +92,7 @@ if available_players.empty:
     st.warning("No available players left!")
 else:
     display_df = available_players.drop(columns=["drafted_by"])
-    st.dataframe(display_df, width=1500, use_container_width=False)
+    st.dataframe(display_df, width=1500)
 
 # --- Roster & Bench ---
 roster_template = {"F": 6, "D": 4, "G": 2}
@@ -142,7 +142,9 @@ if selected_team == current_team:
             players.loc[players["Name"] == chosen_player, "drafted_by"] = selected_team
             st.session_state.pick_number += 1
 
-            db_utils.save_players(players)
+            players_to_save = players.where(pd.notnull(players), None)
+            db_utils.save_players(players_to_save)
+
             st.success(f"{selected_team} drafted {chosen_player}!")
             st.experimental_rerun()
     else:
