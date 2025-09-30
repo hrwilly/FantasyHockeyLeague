@@ -130,10 +130,14 @@ if not available_players_team.empty:
     if st.button("Draft Player", key="draft_player_button"):
         # Assign player to team
         players.loc[players["Name"] == chosen_player, "drafted_by"] = selected_team
-
+    
         # Save to Supabase
         db_utils.save_player(players.loc[players["Name"] == chosen_player].iloc[0])
-
+    
+        # Refetch all players so roster updates immediately
+        players = db_utils.load_players()
+        my_team_players = players[players["drafted_by"] == selected_team]
+    
         st.success(f"{selected_team} drafted {chosen_player}!")
 else:
     st.info("Roster is full. You cannot draft more players.")
