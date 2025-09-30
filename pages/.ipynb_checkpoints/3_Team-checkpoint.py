@@ -26,41 +26,42 @@ if "team_name" not in st.session_state:
     st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
 selected_team = st.session_state["team_name"]
 
-# --- Helper function to build full roster ---
 def build_roster(players_df, team_name):
     roster_template = {"F": 6, "D": 4, "G": 2}  # starting positions
     num_bench = 5
 
     team_players = players_df[players_df["drafted_by"] == team_name].copy()
 
-    # Initialize empty roster
+    # Create roster placeholders
     roster_rows = []
     for pos, slots in roster_template.items():
         for _ in range(slots):
             roster_rows.append({"Pos.": pos, "Name": "---", "team": "---", "Ht.": "---", "Wt.": "---"})
     for _ in range(num_bench):
         roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---", "Ht.": "---", "Wt.": "---"})
-
     my_roster = pd.DataFrame(roster_rows)
 
-    # Fill roster with drafted players
+    # Counters for starters per position
     pos_counts = {pos: 0 for pos in roster_template.keys()}
+    bench_index = sum(roster_template.values())  # first bench slot
+
     for _, row in team_players.iterrows():
         pos = row["Pos."]
         if pos in roster_template and pos_counts[pos] < roster_template[pos]:
-            index = sum([roster_template[p] for p in roster_template
-                         if list(roster_template.keys()).index(p) < list(roster_template.keys()).index(pos)]) + pos_counts[pos]
-            my_roster.loc[index, ["Name", "team", "Ht.", "Wt."]] = row[["Name", "team", "Ht.", "Wt."]]
+            # Find the correct starter slot
+            start_index = sum([roster_template[p] for p in roster_template
+                               if list(roster_template.keys()).index(p) < list(roster_template.keys()).index(pos)])
+            my_roster.loc[start_index + pos_counts[pos], ["Name", "team", "Ht.", "Wt."]] = row[["Name", "team", "Ht.", "Wt."]]
             pos_counts[pos] += 1
         else:
-            # Bench slots labeled "Bench - Pos"
-            for i in range(len(my_roster)):
-                if my_roster.loc[i, "Pos."].startswith("Bench") and my_roster.loc[i, "Name"] == "---":
-                    my_roster.loc[i, "Pos."] = f"Bench - {pos}"
-                    my_roster.loc[i, ["Name", "team", "Ht.", "Wt."]] = row[["Name", "team", "Ht.", "Wt."]]
-                    break
+            # Fill bench sequentially
+            my_roster.loc[bench_index, ["Pos.", "Name", "team", "Ht.", "Wt."]] = [
+                f"Bench - {pos}", row["Name"], row["team"], row["Ht."], row["Wt."]
+            ]
+            bench_index += 1
 
     return my_roster
+
 
 # --- Display roster ---
 st.subheader(f"{selected_team}'s Roster")
