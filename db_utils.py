@@ -2,6 +2,7 @@
 from supabase import create_client
 import streamlit as st
 import pandas as pd
+import time
 
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
