@@ -35,7 +35,7 @@ def build_roster(players_df, team_name):
     # Create roster placeholders
     roster_rows = []
     for pos, slots in roster_template.items():
-        for _ in range(slots + 1):
+        for _ in range(slots):
             roster_rows.append({"Pos.": pos, "Name": "---", "team": "---", "Ht.": "---", "Wt.": "---"})
     for _ in range(num_bench):
         roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---", "Ht.": "---", "Wt.": "---"})
@@ -47,7 +47,7 @@ def build_roster(players_df, team_name):
 
     for _, row in team_players.iterrows():
         pos = row["Pos."]
-        if pos in roster_template and pos_counts[pos] < roster_template[pos]:
+        if pos in roster_template and pos_counts[pos] <= roster_template[pos]:
             # Find the correct starter slot
             start_index = sum([roster_template[p] for p in roster_template
                                if list(roster_template.keys()).index(p) < list(roster_template.keys()).index(pos)])
