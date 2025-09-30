@@ -156,9 +156,8 @@ else:
 st.subheader("Draft Board")
 draft_board = players[players["drafted_by"].notna()].copy()
 if not draft_board.empty:
-    draft_board = draft_board.sort_values("Pick_Number")
     st.dataframe(
-        draft_board[["Pick_Number", "Name", "Pos.", "team", "drafted_by"]],
+        draft_board[["Name", "Pos.", "team", "drafted_by"]],
         width="stretch"
     )
 else:
