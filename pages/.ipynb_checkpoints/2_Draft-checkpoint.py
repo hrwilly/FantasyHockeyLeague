@@ -181,4 +181,4 @@ for _, row in my_team_players.iterrows():
     pos = row["Pos."]
     if pos in roster_template and pos_counts[pos] < roster_template[pos]:
         index = sum([roster_template[p] for p in roster_template
-                     if list(roster_template.keys()).index(p) < list(roster_template.keys()).index(pos)]) + pos_counts_
+                     if list(roster_template.keys()).index(p) < list(roster_template.keys()).index(pos)]) + pos_counts
