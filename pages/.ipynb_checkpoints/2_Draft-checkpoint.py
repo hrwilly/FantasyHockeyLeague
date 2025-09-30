@@ -8,22 +8,28 @@ st.title("🏒 Fantasy Draft Room")
 # --- Auto-refresh every 5 seconds ---
 st_autorefresh(interval=5000, key="draft_autorefresh")
 
-# --- Load teams and players from database ---
-teams = db_utils.load_teams()
-players = db_utils.load_players()
+# --- Load teams into session_state once ---
+if "teams" not in st.session_state:
+    st.session_state.teams = db_utils.load_teams()
+teams = st.session_state.teams
 
 if teams.empty:
     st.warning("No teams registered yet. Go to the Register page first.")
     st.stop()
 
-# --- Persistent session state for team selection ---
-st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
-selected_team = st.session_state["team_name"]
+# --- Load players into session_state once ---
+if "players" not in st.session_state:
+    st.session_state.players = db_utils.load_players()
+players = st.session_state.players
 
-# --- Ensure pick counter persists and resumes from saved state ---
+# --- Ensure pick counter persists ---
 if "pick_number" not in st.session_state:
     if "Pick_Number" in players.columns and players["Pick_Number"].dropna().size > 0:
-        st.session_state.pick_number = int(players["Pick_Number"].dropna().max()) + 1
+        try:
+            max_pick = int(players["Pick_Number"].dropna().max())
+            st.session_state.pick_number = max_pick + 1
+        except Exception:
+            st.session_state.pick_number = 1
     else:
         st.session_state.pick_number = 1
 
@@ -40,7 +46,7 @@ current_round_order = get_snake_order(current_round, teams["team_name"].tolist()
 current_pick_index = total_picks % num_teams
 current_team = current_round_order[current_pick_index]
 
-num_rounds = 17  # total rounds
+num_rounds = 17
 total_allowed_picks = num_rounds * num_teams
 if total_picks >= total_allowed_picks:
     st.info("Draft is complete! No more picks.")
@@ -75,6 +81,10 @@ for col, (rnd, team) in zip(cols, upcoming_picks):
         """,
         unsafe_allow_html=True
     )
+
+# --- Select your team ---
+st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
+selected_team = st.session_state["team_name"]
 
 # --- Available players ---
 available_players = players[players["drafted_by"].isna()].copy()
@@ -117,25 +127,25 @@ available_players_team = available_players[available_players.apply(can_draft_pla
 # --- Draft Controls ---
 st.subheader("Draft Controls")
 
+# Persistent button state
 if "draft_triggered" not in st.session_state:
     st.session_state.draft_triggered = False
 
-# Dropdown for available players
-if not available_players_team.empty:
-    available_players_team["label"] = available_players_team.apply(
-        lambda row: f"{row['Name']} — {row['Pos.']} — {row['team']}", axis=1
-    )
-    label_to_name = dict(zip(available_players_team["label"], available_players_team["Name"]))
+# Labels: "Name — Pos — Team"
+available_players_team["label"] = available_players_team.apply(
+    lambda row: f"{row['Name']} — {row['Pos.']} — {row['team']}", axis=1
+)
+label_to_name = dict(zip(available_players_team["label"], available_players_team["Name"]))
 
-    selected_label = st.selectbox(
-        "Select a player to draft:",
-        options=available_players_team["label"].tolist(),
-        key="player_select_dropdown"
-    )
-    chosen_player = label_to_name[selected_label]
+selected_label = st.selectbox(
+    "Select a player to draft:",
+    options=available_players_team["label"].tolist(),
+    key="player_select_dropdown"
+)
+chosen_player = label_to_name[selected_label]
 
-    if st.button("Draft Player", key="draft_player_button"):
-        st.session_state.draft_triggered = True
+if st.button("Draft Player", key="draft_player_button"):
+    st.session_state.draft_triggered = True
 
 # --- Handle draft action ---
 if st.session_state.draft_triggered:
@@ -144,15 +154,15 @@ if st.session_state.draft_triggered:
     players.loc[idx, "drafted_by"] = selected_team
     st.session_state.pick_number += 1
 
-    # Upsert drafted player to database
+    # Upsert only the drafted player
     db_utils.save_player(players.loc[idx].iloc[0])
+
+    # Update session_state players immediately for roster and draft board
+    st.session_state.players = players.copy()
     st.success(f"{selected_team} drafted {chosen_player}!")
     st.session_state.draft_triggered = False
 
-    # Immediately reload players from the database
-    players = db_utils.load_players()
-
-# --- My Roster with Bench (filtered by session_state["team_name"]) ---
+# --- My Roster with Bench ---
 st.subheader("My Roster")
 my_team_players = players[players["drafted_by"] == selected_team]
 
@@ -187,6 +197,9 @@ st.subheader("Draft Board")
 draft_board = players[players["drafted_by"].notna()].copy()
 if not draft_board.empty:
     draft_board = draft_board.sort_values("Pick_Number")
-    st.dataframe(draft_board[["Pick_Number", "Name", "Pos.", "team", "drafted_by"]])
+    st.dataframe(
+        draft_board[["Pick_Number", "Name", "Pos.", "team", "drafted_by"]],
+        width='stretch'
+    )
 else:
     st.info("No players have been drafted yet.")
