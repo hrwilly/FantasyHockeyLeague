@@ -135,9 +135,11 @@ if selected_team == current_team:
 
         # Handle draft action
         if st.session_state.draft_triggered:
-            players.loc[players["Name"] == chosen_player, "drafted_by"] = selected_team
+            idx = players["Name"] == chosen_player
+            players.loc[idx, "drafted_by"] = selected_team
 
-            db_utils.save_players(players)
+            # Upsert only the drafted player
+            db_utils.save_player(players.loc[idx].iloc[0])
             st.success(f"{selected_team} drafted {chosen_player}!")
             st.session_state.draft_triggered = False
     else:
