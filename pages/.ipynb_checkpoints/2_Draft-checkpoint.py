@@ -8,9 +8,14 @@ st.title("🏒 Fantasy Draft Room")
 # --- Auto-refresh every 5 seconds ---
 st_autorefresh(interval=5000, key="draft_autorefresh")
 
-# --- Load teams and players ---
-teams = db_utils.load_teams()
-players = db_utils.load_players()
+# --- Load teams and players into session state ---
+if "teams" not in st.session_state:
+    st.session_state.teams = db_utils.load_teams()
+if "players" not in st.session_state:
+    st.session_state.players = db_utils.load_players()
+
+teams = st.session_state.teams
+players = st.session_state.players
 
 if teams.empty:
     st.warning("No teams registered yet. Go to the Register page first.")
@@ -29,7 +34,7 @@ current_round_order = get_snake_order(current_round, teams["team_name"].tolist()
 current_pick_index = total_picks % num_teams
 current_team = current_round_order[current_pick_index]
 
-num_rounds = 17  # set number of rounds
+num_rounds = 17
 total_allowed_picks = num_rounds * num_teams
 if total_picks >= total_allowed_picks:
     st.info("Draft is complete! No more picks.")
@@ -66,8 +71,9 @@ for col, (rnd, team) in zip(cols, upcoming_picks):
     )
 
 # --- Select your team ---
-st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
-selected_team = st.session_state["team_name"]
+if "team_name" not in st.session_state:
+    st.session_state.team_name = st.selectbox("Select your team:", teams["team_name"])
+selected_team = st.session_state.team_name
 
 # --- Available players ---
 available_players = players[players["drafted_by"].isna()].copy()
@@ -82,11 +88,16 @@ else:
     display_df = available_players.drop(columns=["drafted_by"])
     st.dataframe(display_df, width='stretch', use_container_width=False)
 
-# --- Roster and bench limits ---
+# --- Roster and Bench Limits ---
 roster_template = {"F": 6, "D": 4, "G": 2}
 num_bench = 5
-my_team_players = players[players["drafted_by"] == selected_team]
 
+def get_team_roster(players_df, team_name):
+    return players_df[players_df["drafted_by"] == team_name]
+
+my_team_players = get_team_roster(players, selected_team)
+
+# --- Count drafted players in starting positions and bench ---
 starting_counts = {pos: 0 for pos in roster_template.keys()}
 bench_count = 0
 for _, row in my_team_players.iterrows():
@@ -98,8 +109,7 @@ for _, row in my_team_players.iterrows():
 
 def can_draft_player(player_row):
     pos = player_row["Pos."]
-    starting_limit = roster_template.get(pos, 0)
-    if pos in roster_template and starting_counts[pos] < starting_limit:
+    if pos in roster_template and starting_counts[pos] < roster_template[pos]:
         return True
     elif bench_count < num_bench:
         return True
@@ -110,48 +120,37 @@ available_players_team = available_players[available_players.apply(can_draft_pla
 # --- Draft Controls ---
 st.subheader("Draft Controls")
 
-# Persistent button state
-if "draft_triggered" not in st.session_state:
-    st.session_state.draft_triggered = False
+if not available_players_team.empty:
+    # Labels: "Name — Pos — Team"
+    available_players_team = available_players_team.copy()
+    available_players_team["label"] = available_players_team.apply(
+        lambda row: f"{row['Name']} — {row['Pos.']} — {row['team']}", axis=1
+    )
+    label_to_name = dict(zip(available_players_team["label"], available_players_team["Name"]))
 
-if selected_team == current_team:
-    if not available_players_team.empty:
-        # Labels: "Name — Pos — Team"
-        available_players_team["label"] = available_players_team.apply(
-            lambda row: f"{row['Name']} — {row['Pos.']} — {row['team']}", axis=1
-        )
-        label_to_name = dict(zip(available_players_team["label"], available_players_team["Name"]))
+    selected_label = st.selectbox(
+        "Select a player to draft:",
+        options=available_players_team["label"].tolist(),
+        key="player_select_dropdown"
+    )
+    chosen_player = label_to_name[selected_label]
 
-        selected_label = st.selectbox(
-            "Select a player to draft:",
-            options=available_players_team["label"].tolist(),
-            key="player_select_dropdown"
-        )
-        chosen_player = label_to_name[selected_label]
+    if st.button("Draft Player", key="draft_player_button"):
+        # Update local session state
+        idx = players["Name"] == chosen_player
+        players.loc[idx, "drafted_by"] = selected_team
 
-        if st.button("Draft Player", key="draft_player_button"):
-            st.session_state.draft_triggered = True
+        # Upsert drafted player
+        db_utils.save_player(players.loc[idx].iloc[0])
 
-        # Handle draft action
-        if st.session_state.draft_triggered:
-            # Draft the player in memory
-            idx = players["Name"] == chosen_player
-            players.loc[idx, "drafted_by"] = selected_team
-            
-            # Save to Supabase
-            db_utils.save_player(players.loc[idx].iloc[0])
-            
-            # Refetch full players table so roster and draft board update
-            players = db_utils.load_players()
-            my_team_players = players[players["drafted_by"] == selected_team]
-            draft_board = players[players["drafted_by"].notna()]
-            
-            st.success(f"{selected_team} drafted {chosen_player}!")
-            st.session_state.draft_triggered = False
-    else:
-        st.info("Roster is full. You cannot draft more players.")
+        # Reload players from Supabase to ensure full consistency
+        st.session_state.players = db_utils.load_players()
+        players = st.session_state.players
+        my_team_players = get_team_roster(players, selected_team)
+
+        st.success(f"{selected_team} drafted {chosen_player}!")
 else:
-    st.info(f"It is not your turn. Waiting for {current_team} to pick...")
+    st.info("Roster is full. You cannot draft more players.")
 
 # --- My Roster with Bench ---
 st.subheader("My Roster")
@@ -180,7 +179,6 @@ for _, row in my_team_players.iterrows():
                 break
 
 st.table(my_roster)
-
 
 # --- Draft Board ---
 st.subheader("Draft Board")
