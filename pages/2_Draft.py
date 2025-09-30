@@ -13,19 +13,11 @@ count = st_autorefresh(interval=5000, limit=None, key="draft_autorefresh")
 teams = db_utils.load_teams()
 players = db_utils.load_players()
 
+pick_num = 1
+
 if teams.empty:
     st.warning("No teams registered yet. Go to the Register page first.")
     st.stop()
-
-# --- Ensure pick counter persists ---
-if "pick_number" not in st.session_state:
-    if "Pick_Number" in players.columns and players["Pick_Number"].dropna().size > 0:
-        try:
-            st.session_state.pick_number = int(players["Pick_Number"].dropna().max()) + 1
-        except Exception:
-            st.session_state.pick_number = 1
-    else:
-        st.session_state.pick_number = 1
 
 num_teams = len(teams)
 drafted_players = players[players["drafted_by"].notna()]
@@ -151,9 +143,9 @@ if selected_team == current_team:
         # Handle draft action
         if st.session_state.draft_triggered:
             idx = players["Name"] == chosen_player
-            players.loc[idx, "Pick_Number"] = st.session_state.pick_number
+            players.loc[idx, "Pick_Number"] = pick_num
             players.loc[idx, "drafted_by"] = selected_team
-            st.session_state.pick_number += 1
+            pick_num += 1
         
             # Upsert only the drafted player
             db_utils.save_player(players.loc[idx].iloc[0])
