@@ -77,6 +77,15 @@ roster_template = {"F": 6, "D": 4, "G": 2}
 num_bench = 5
 max_total_players = sum(roster_template.values()) + num_bench
 
+
+# --- Available Players Table ---
+st.subheader("Available Players")
+available_players = players[players["drafted_by"].isna()]
+if available_players.empty:
+    st.warning("No available players left!")
+else:
+    st.dataframe(available_players.drop(columns=["drafted_by"]), width='stretch')
+
 # --- Draft Controls ---
 st.subheader("Draft Controls")
 
@@ -139,13 +148,6 @@ if not available_players_team.empty:
 else:
     st.info("Roster is full. You cannot draft more players.")
 
-# --- Available Players Table ---
-st.subheader("Available Players")
-available_players = players[players["drafted_by"].isna()]
-if available_players.empty:
-    st.warning("No available players left!")
-else:
-    st.dataframe(available_players.drop(columns=["drafted_by"]), width='stretch')
 
 # --- My Roster Table ---
 st.subheader("My Roster")
