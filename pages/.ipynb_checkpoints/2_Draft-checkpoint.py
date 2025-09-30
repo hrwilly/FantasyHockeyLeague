@@ -40,7 +40,7 @@ current_round_order = get_snake_order(current_round, teams["team_name"].tolist()
 current_pick_index = total_picks % num_teams
 current_team = current_round_order[current_pick_index]
 
-num_rounds = 17  # set number of rounds
+num_rounds = 17
 total_allowed_picks = num_rounds * num_teams
 if total_picks >= total_allowed_picks:
     st.info("Draft is complete! No more picks.")
@@ -97,7 +97,11 @@ else:
 # --- Roster and bench limits ---
 roster_template = {"F": 6, "D": 4, "G": 2}
 num_bench = 5
-my_team_players = players[players["drafted_by"] == selected_team]
+
+def get_my_team_players():
+    return players[players["drafted_by"] == selected_team]
+
+my_team_players = get_my_team_players()
 
 starting_counts = {pos: 0 for pos in roster_template.keys()}
 bench_count = 0
@@ -136,22 +140,18 @@ if not available_players_team.empty:
     chosen_player = label_to_name[selected_label]
 
     if st.button("Draft Player", key="draft_player_button"):
-        # Update local players DataFrame
+        # Update players DataFrame
         idx = players["Name"] == chosen_player
         players.loc[idx, "Pick_Number"] = st.session_state.pick_number
         players.loc[idx, "drafted_by"] = selected_team
         st.session_state.pick_number += 1
 
-        # Upsert only the drafted player
+        # Upsert drafted player
         db_utils.save_player(players.loc[idx].iloc[0])
         st.success(f"{selected_team} drafted {chosen_player}!")
 
-        # Reload my_team_players from updated players
-        my_team_players = players[players["drafted_by"] == selected_team]
-    else:
-        st.info("Roster is full. You cannot draft more players.")
-else:
-    st.info(f"It is not your turn. Waiting for {current_team} to pick...")
+        # Reload my team players for roster display
+        my_team_players = get_my_team_players()
 
 # --- My Roster with Bench ---
 st.subheader("My Roster")
