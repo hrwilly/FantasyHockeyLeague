@@ -29,7 +29,6 @@ def load_players():
     res = supabase.table("players").select("*").execute()
     return pd.DataFrame(res.data)
 
-def save_players(df):
-    # Upsert all rows back to Supabase
-    for _, row in df.iterrows():
-        supabase.table("players").upsert(row.to_dict()).execute()
+def save_player(row):
+    row_clean = row.where(pd.notna(row), None)
+    supabase.table("players").upsert(row_clean.to_dict()).execute()
