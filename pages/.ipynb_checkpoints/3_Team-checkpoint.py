@@ -12,7 +12,6 @@ if "last_refresh" not in st.session_state:
 
 if time.time() - st.session_state["last_refresh"] > refresh_interval:
     st.session_state["last_refresh"] = time.time()
-    st.experimental_rerun()
 
 # --- Load data ---
 teams = db_utils.load_teams()
@@ -23,67 +22,61 @@ if teams.empty:
     st.stop()
 
 # --- Select your team ---
-selected_team = st.selectbox("Select your team:", teams["team_name"])
+if "team_name" not in st.session_state:
+    st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
+selected_team = st.session_state["team_name"]
 
-# --- Filter players for this team ---
-my_team_players = players[players["drafted_by"] == selected_team].copy()
+# --- Helper function to build full roster ---
+def build_roster(players_df, team_name):
+    roster_template = {"F": 6, "D": 4, "G": 2}  # starting positions
+    num_bench = 5
 
-if my_team_players.empty:
-    st.info("No players on your team yet.")
-    st.stop()
+    team_players = players_df[players_df["drafted_by"] == team_name].copy()
 
-# --- Roster template and bench ---
-roster_template = {"F": 6, "D": 4, "G": 2}  # starting positions
-num_bench = 5
+    # Initialize empty roster
+    roster_rows = []
+    for pos, slots in roster_template.items():
+        for _ in range(slots):
+            roster_rows.append({"Pos.": pos, "Name": "---", "team": "---", "Ht.": "---", "Wt.": "---"})
+    for _ in range(num_bench):
+        roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---", "Ht.": "---", "Wt.": "---"})
 
-# --- Build fixed-order roster with placeholders ---
-roster_rows = []
-for pos, slots in roster_template.items():
-    for _ in range(slots):
-        roster_rows.append({"Pos.": pos, "Name": "---", "team": "---", "Ht.": "---", "Wt.": "---"})
-for _ in range(num_bench):
-    roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---", "Ht.": "---", "Wt.": "---"})
+    my_roster = pd.DataFrame(roster_rows)
 
-my_roster = pd.DataFrame(roster_rows)
+    # Fill roster with drafted players
+    pos_counts = {pos: 0 for pos in roster_template.keys()}
+    for _, row in team_players.iterrows():
+        pos = row["Pos."]
+        if pos in roster_template and pos_counts[pos] < roster_template[pos]:
+            index = sum([roster_template[p] for p in roster_template
+                         if list(roster_template.keys()).index(p) < list(roster_template.keys()).index(pos)]) + pos_counts[pos]
+            my_roster.loc[index, ["Name", "team", "Ht.", "Wt."]] = row[["Name", "team", "Ht.", "Wt."]]
+            pos_counts[pos] += 1
+        else:
+            # Bench slots labeled "Bench - Pos"
+            for i in range(len(my_roster)):
+                if my_roster.loc[i, "Pos."].startswith("Bench") and my_roster.loc[i, "Name"] == "---":
+                    my_roster.loc[i, "Pos."] = f"Bench - {pos}"
+                    my_roster.loc[i, ["Name", "team", "Ht.", "Wt."]] = row[["Name", "team", "Ht.", "Wt."]]
+                    break
 
-# --- Fill roster with drafted players ---
-pos_counts = {pos: 0 for pos in roster_template.keys()}
-bench_count = 0
-
-for _, row in my_team_players.iterrows():
-    pos = row["Pos."]
-    if pos in roster_template and pos_counts[pos] < roster_template[pos]:
-        index = sum([roster_template[p] for p in roster_template
-                     if list(roster_template.keys()).index(p) < list(roster_template.keys()).index(pos)]) + pos_counts[pos]
-        my_roster.loc[index, ["Name", "team", "Ht.", "Wt."]] = row[["Name", "team", "Ht.", "Wt."]]
-        pos_counts[pos] += 1
-    else:
-        # Bench slots labeled "Bench - Pos"
-        for i in range(len(my_roster)):
-            if my_roster.loc[i, "Pos."].startswith("Bench") and my_roster.loc[i, "Name"] == "---":
-                my_roster.loc[i, "Pos."] = f"Bench - {pos}"
-                my_roster.loc[i, ["Name", "team", "Ht.", "Wt."]] = row[["Name", "team", "Ht.", "Wt."]]
-                bench_count += 1
-                break
+    return my_roster
 
 # --- Display roster ---
 st.subheader(f"{selected_team}'s Roster")
+my_roster = build_roster(players, selected_team)
 st.table(my_roster)
 
 # --- Interactive Swap ---
 st.subheader("Swap Players (Starters ↔ Bench)")
 
-# Initialize session state
+# Initialize session state for swaps
 if "swap1" not in st.session_state:
     st.session_state.swap1 = ""
 if "swap2" not in st.session_state:
     st.session_state.swap2 = ""
 
-# Reload players to ensure latest
-players = db_utils.load_players()
-my_team_players = players[players["drafted_by"] == selected_team].copy()
-
-# Build starter & bench lists from displayed roster
+# --- Build starter & bench lists from displayed roster ---
 starters = my_roster[~my_roster["Pos."].str.startswith("Bench") & (my_roster["Name"] != "---")]
 bench = my_roster[my_roster["Pos."].str.startswith("Bench") & (my_roster["Name"] != "---")]
 
@@ -105,6 +98,7 @@ st.session_state.swap2 = st.selectbox("Select Bench player to swap in", swap2_op
 
 # --- Swap action ---
 if st.button("Swap Players") and st.session_state.swap1 and st.session_state.swap2:
+    # Find indices in the main players DataFrame
     idx1 = players.index[players["Name"] == st.session_state.swap1][0]
     idx2 = players.index[players["Name"] == st.session_state.swap2][0]
 
@@ -113,4 +107,11 @@ if st.button("Swap Players") and st.session_state.swap1 and st.session_state.swa
     db_utils.save_players(players)
 
     st.success(f"Swapped {st.session_state.swap1} and {st.session_state.swap2}")
-    st.experimental_rerun()
+
+    # Reset selections
+    st.session_state.swap1 = ""
+    st.session_state.swap2 = ""
+
+    # Rebuild roster immediately
+    my_roster = build_roster(players, selected_team)
+    st.table(my_roster)
