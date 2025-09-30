@@ -33,14 +33,3 @@ def load_players():
 def save_player(row):
     row_clean = row.where(pd.notna(row), None)
     supabase.table("players").upsert(row_clean.to_dict()).execute()
-
-def load_players_safe(retries=3, delay=1):
-    for attempt in range(retries):
-        try:
-            return pd.DataFrame(db_utils.load_players())
-        except Exception as e:
-            if attempt < retries - 1:
-                time.sleep(delay)
-            else:
-                st.error(f"Failed to load players after {retries} attempts: {e}")
-                return pd.DataFrame()

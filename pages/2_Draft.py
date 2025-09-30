@@ -10,7 +10,7 @@ st_autorefresh(interval=5000, key="draft_autorefresh")
 
 # --- Load teams and players ---
 teams = db_utils.load_teams()
-players = db_utils.load_players_safe()
+players = db_utils.load_players()
 
 if teams.empty:
     st.warning("No teams registered yet. Go to the Register page first.")
@@ -143,7 +143,7 @@ if not available_players_team.empty:
         st.success(f"{selected_team} drafted {chosen_player}!")
 
         # Re-load players to refresh roster and draft board across devices
-        players = db_utils.load_players_safe()
+        players = db_utils.load_players()
         my_team_players = players[players["drafted_by"] == selected_team]
         drafted_players = players[players["drafted_by"].notna()]
 
