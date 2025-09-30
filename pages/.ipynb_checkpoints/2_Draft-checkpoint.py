@@ -17,23 +17,20 @@ if teams.empty:
     st.warning("No teams registered yet. Go to the Register page first.")
     st.stop()
 
-# --- Load players into session_state once ---
-if "players" not in st.session_state:
-    st.session_state.players = db_utils.load_players()
-players = st.session_state.players
+# --- Select your team ---
+st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
+selected_team = st.session_state["team_name"]
 
-# --- Ensure pick counter persists ---
-if "pick_number" not in st.session_state:
-    if "Pick_Number" in players.columns and players["Pick_Number"].dropna().size > 0:
-        try:
-            max_pick = int(players["Pick_Number"].dropna().max())
-            st.session_state.pick_number = max_pick + 1
-        except Exception:
-            st.session_state.pick_number = 1
-    else:
-        st.session_state.pick_number = 1
+# --- Load players fresh from DB ---
+players = db_utils.load_players()
 
-# --- Snake draft order ---
+# --- Ensure pick counter persists across devices ---
+pick_number = db_utils.load_pick_number()
+if pick_number is None:
+    pick_number = 1
+st.session_state.pick_number = pick_number
+
+# --- Snake draft order computation ---
 num_teams = len(teams)
 drafted_players = players[players["drafted_by"].notna()]
 total_picks = len(drafted_players)
@@ -82,11 +79,7 @@ for col, (rnd, team) in zip(cols, upcoming_picks):
         unsafe_allow_html=True
     )
 
-# --- Select your team ---
-st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
-selected_team = st.session_state["team_name"]
-
-# --- Available players ---
+# --- Available Players ---
 available_players = players[players["drafted_by"].isna()].copy()
 available_players = available_players.sort_values(
     by="Draft Round", key=lambda col: pd.to_numeric(col, errors="coerce"), na_position="last"
@@ -102,8 +95,9 @@ else:
 # --- Roster and bench limits ---
 roster_template = {"F": 6, "D": 4, "G": 2}
 num_bench = 5
-my_team_players = players[players["drafted_by"] == selected_team]
 
+# Count positions for selected team
+my_team_players = players[players["drafted_by"] == selected_team]
 starting_counts = {pos: 0 for pos in roster_template.keys()}
 bench_count = 0
 for _, row in my_team_players.iterrows():
@@ -127,11 +121,7 @@ available_players_team = available_players[available_players.apply(can_draft_pla
 # --- Draft Controls ---
 st.subheader("Draft Controls")
 
-# Persistent button state
-if "draft_triggered" not in st.session_state:
-    st.session_state.draft_triggered = False
-
-# Labels: "Name — Pos — Team"
+# Labels for dropdown
 available_players_team["label"] = available_players_team.apply(
     lambda row: f"{row['Name']} — {row['Pos.']} — {row['team']}", axis=1
 )
@@ -145,27 +135,23 @@ selected_label = st.selectbox(
 chosen_player = label_to_name[selected_label]
 
 if st.button("Draft Player", key="draft_player_button"):
-    st.session_state.draft_triggered = True
-
-# --- Handle draft action ---
-if st.session_state.draft_triggered:
     idx = players["Name"] == chosen_player
     players.loc[idx, "Pick_Number"] = st.session_state.pick_number
     players.loc[idx, "drafted_by"] = selected_team
+
+    # --- Persist changes ---
+    db_utils.save_player(players.loc[idx].iloc[0])
+    db_utils.save_pick_number(st.session_state.pick_number + 1)
     st.session_state.pick_number += 1
 
-    # Upsert only the drafted player
-    db_utils.save_player(players.loc[idx].iloc[0])
-
-    # Update session_state players immediately for roster and draft board
-    st.session_state.players = players.copy()
     st.success(f"{selected_team} drafted {chosen_player}!")
-    st.session_state.draft_triggered = False
 
-# --- My Roster with Bench ---
+    # Refresh data immediately
+    players = db_utils.load_players()
+    my_team_players = players[players["drafted_by"] == selected_team]
+
+# --- My Roster ---
 st.subheader("My Roster")
-my_team_players = players[players["drafted_by"] == selected_team]
-
 roster_rows = []
 for pos, slots in roster_template.items():
     for _ in range(slots):

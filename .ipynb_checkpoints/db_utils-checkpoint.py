@@ -33,3 +33,16 @@ def load_players():
 def save_player(row):
     row_clean = row.where(pd.notna(row), None)
     supabase.table("players").upsert(row_clean.to_dict()).execute()
+
+def load_pick_number() -> int:
+    """Load the current pick number from DB."""
+    response = supabase.table("draft_state").select("pick_number").limit(1).execute()
+    data = response.data
+    if data:
+        return data[0]["pick_number"]
+    return None
+
+def save_pick_number(pick_number: int):
+    """Save the current pick number to DB."""
+    supabase.table("draft_state").upsert({"id": 1, "pick_number": pick_number}).execute()
+
