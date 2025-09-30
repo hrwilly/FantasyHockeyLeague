@@ -159,18 +159,6 @@ if selected_team == current_team:
 else:
     st.info(f"It is not your turn. Waiting for {current_team} to pick...")
 
-# --- Draft Board ---
-st.subheader("Draft Board")
-draft_board = players[players["drafted_by"].notna()].copy()
-if not draft_board.empty:
-    draft_board = draft_board.sort_values("Pick_Number")
-    st.dataframe(
-        draft_board[["Pick_Number", "Name", "Pos.", "team", "drafted_by"]],
-        width='stretch'
-    )
-else:
-    st.info("No players have been drafted yet.")
-
 # --- My Roster with Bench ---
 st.subheader("My Roster")
 roster_rows = []
@@ -198,3 +186,15 @@ for _, row in my_team_players.iterrows():
                 break
 
 st.table(my_roster)
+
+# --- Draft Board ---
+st.subheader("Draft Board")
+draft_board = players[players["drafted_by"].notna()].copy()
+if not draft_board.empty:
+    draft_board = draft_board.sort_values("Pick_Number")
+    st.dataframe(
+        draft_board[["Pick_Number", "Name", "Pos.", "team", "drafted_by"]],
+        width='stretch'
+    )
+else:
+    st.info("No players have been drafted yet.")
