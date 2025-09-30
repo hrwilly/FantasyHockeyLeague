@@ -35,7 +35,7 @@ def build_roster(players_df, team_name):
     # Create roster placeholders
     roster_rows = []
     for pos, slots in roster_template.items():
-        for _ in range(slots):
+        for _ in range(slots + 1):
             roster_rows.append({"Pos.": pos, "Name": "---", "team": "---", "Ht.": "---", "Wt.": "---"})
     for _ in range(num_bench):
         roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---", "Ht.": "---", "Wt.": "---"})
