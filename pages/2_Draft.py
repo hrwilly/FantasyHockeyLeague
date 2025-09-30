@@ -5,17 +5,14 @@ from streamlit_autorefresh import st_autorefresh
 
 st.title("🏒 Fantasy Draft Room")
 
-# --- Auto-refresh every 5 seconds ---
+# --- Auto-refresh every 5 seconds for multi-user sync ---
 st_autorefresh(interval=5000, key="draft_autorefresh")
 
-# --- Load teams and players into session state ---
-if "teams" not in st.session_state:
-    st.session_state.teams = db_utils.load_teams()
+# --- Load teams and players ---
 if "players" not in st.session_state:
     st.session_state.players = db_utils.load_players()
-
-teams = st.session_state.teams
 players = st.session_state.players
+teams = db_utils.load_teams()
 
 if teams.empty:
     st.warning("No teams registered yet. Go to the Register page first.")
@@ -34,7 +31,7 @@ current_round_order = get_snake_order(current_round, teams["team_name"].tolist()
 current_pick_index = total_picks % num_teams
 current_team = current_round_order[current_pick_index]
 
-num_rounds = 17
+num_rounds = 17  # total draft rounds
 total_allowed_picks = num_rounds * num_teams
 if total_picks >= total_allowed_picks:
     st.info("Draft is complete! No more picks.")
@@ -72,32 +69,25 @@ for col, (rnd, team) in zip(cols, upcoming_picks):
 
 # --- Select your team ---
 if "team_name" not in st.session_state:
-    st.session_state.team_name = st.selectbox("Select your team:", teams["team_name"])
-selected_team = st.session_state.team_name
+    st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
+selected_team = st.session_state["team_name"]
 
-# --- Available players ---
+# --- Roster and bench limits ---
+roster_template = {"F": 6, "D": 4, "G": 2}
+num_bench = 5
+max_total_players = sum(roster_template.values()) + num_bench
+
+# --- Draft Controls ---
+st.subheader("Draft Controls")
+
+# Filter available players for drafting
 available_players = players[players["drafted_by"].isna()].copy()
 available_players = available_players.sort_values(
     by="Draft Round", key=lambda col: pd.to_numeric(col, errors="coerce"), na_position="last"
 )
 
-st.subheader("Available Players")
-if available_players.empty:
-    st.warning("No available players left!")
-else:
-    display_df = available_players.drop(columns=["drafted_by"])
-    st.dataframe(display_df, width='stretch', use_container_width=False)
-
-# --- Roster and Bench Limits ---
-roster_template = {"F": 6, "D": 4, "G": 2}
-num_bench = 5
-
-def get_team_roster(players_df, team_name):
-    return players_df[players_df["drafted_by"] == team_name]
-
-my_team_players = get_team_roster(players, selected_team)
-
-# --- Count drafted players in starting positions and bench ---
+# Count current starting/bench players for selected team
+my_team_players = players[players["drafted_by"] == selected_team]
 starting_counts = {pos: 0 for pos in roster_template.keys()}
 bench_count = 0
 for _, row in my_team_players.iterrows():
@@ -109,7 +99,8 @@ for _, row in my_team_players.iterrows():
 
 def can_draft_player(player_row):
     pos = player_row["Pos."]
-    if pos in roster_template and starting_counts[pos] < roster_template[pos]:
+    starting_limit = roster_template.get(pos, 0)
+    if pos in roster_template and starting_counts[pos] < starting_limit:
         return True
     elif bench_count < num_bench:
         return True
@@ -117,12 +108,7 @@ def can_draft_player(player_row):
 
 available_players_team = available_players[available_players.apply(can_draft_player, axis=1)]
 
-# --- Draft Controls ---
-st.subheader("Draft Controls")
-
 if not available_players_team.empty:
-    # Labels: "Name — Pos — Team"
-    available_players_team = available_players_team.copy()
     available_players_team["label"] = available_players_team.apply(
         lambda row: f"{row['Name']} — {row['Pos.']} — {row['team']}", axis=1
     )
@@ -136,28 +122,41 @@ if not available_players_team.empty:
     chosen_player = label_to_name[selected_label]
 
     if st.button("Draft Player", key="draft_player_button"):
-        # Update local session state
+        # Update dataframe immediately
         idx = players["Name"] == chosen_player
         players.loc[idx, "drafted_by"] = selected_team
+        st.session_state.players = players  # update session_state
 
-        # Upsert drafted player
+        # Save only the drafted player to DB
         db_utils.save_player(players.loc[idx].iloc[0])
 
-        # Reload players from Supabase to ensure full consistency
-        st.session_state.players = db_utils.load_players()
-        players = st.session_state.players
-        my_team_players = get_team_roster(players, selected_team)
-
         st.success(f"{selected_team} drafted {chosen_player}!")
+
+        # Reload players for consistent display
+        players = db_utils.load_players()
+        st.session_state.players = players
+
 else:
     st.info("Roster is full. You cannot draft more players.")
 
-# --- My Roster with Bench ---
+# --- Available Players Table ---
+st.subheader("Available Players")
+available_players = players[players["drafted_by"].isna()]
+if available_players.empty:
+    st.warning("No available players left!")
+else:
+    st.dataframe(available_players.drop(columns=["drafted_by"]), width='stretch')
+
+# --- My Roster Table ---
 st.subheader("My Roster")
+my_team_players = players[players["drafted_by"] == selected_team]
 roster_rows = []
+
+# Build starting positions
 for pos, slots in roster_template.items():
     for _ in range(slots):
         roster_rows.append({"Pos.": pos, "Name": "---", "team": "---", "Yr.": "---", "Ht.": "---", "Wt.": "---"})
+# Bench
 for _ in range(num_bench):
     roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---", "Yr.": "---", "Ht.": "---", "Wt.": "---"})
 
@@ -172,6 +171,7 @@ for _, row in my_team_players.iterrows():
         my_roster.loc[index, ["Name", "team", "Yr.", "Ht.", "Wt."]] = row[["Name", "team", "Yr.", "Ht.", "Wt."]]
         pos_counts[pos] += 1
     else:
+        # Fill bench
         for i in range(len(my_roster)):
             if my_roster.loc[i, "Pos."].startswith("Bench") and my_roster.loc[i, "Name"] == "---":
                 my_roster.loc[i, "Pos."] = f"Bench - {pos}"
@@ -180,13 +180,11 @@ for _, row in my_team_players.iterrows():
 
 st.table(my_roster)
 
-# --- Draft Board ---
+# --- Draft Board Table ---
 st.subheader("Draft Board")
-draft_board = players[players["drafted_by"].notna()].copy()
+draft_board = players[players["drafted_by"].notna()]
 if not draft_board.empty:
-    st.dataframe(
-        draft_board[["Name", "Pos.", "team", "drafted_by"]],
-        width='stretch'
-    )
+    draft_board = draft_board.sort_values("Name")  # or any order you want
+    st.dataframe(draft_board[["Name", "Pos.", "team", "drafted_by"]], width='stretch')
 else:
-    st.info("No players have been drafted yet.")
+    st.info("No picks have been made yet.")
