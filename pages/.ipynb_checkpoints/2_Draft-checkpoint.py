@@ -134,11 +134,18 @@ if selected_team == current_team:
 
         # Handle draft action
         if st.session_state.draft_triggered:
+            # Draft the player in memory
             idx = players["Name"] == chosen_player
             players.loc[idx, "drafted_by"] = selected_team
-
-            # Upsert only the drafted player
+            
+            # Save to Supabase
             db_utils.save_player(players.loc[idx].iloc[0])
+            
+            # Refetch full players table so roster and draft board update
+            players = db_utils.load_players()
+            my_team_players = players[players["drafted_by"] == selected_team]
+            draft_board = players[players["drafted_by"].notna()]
+            
             st.success(f"{selected_team} drafted {chosen_player}!")
             st.session_state.draft_triggered = False
     else:
