@@ -40,6 +40,6 @@ st.markdown("""
 - One lineup set for the entire weekend. No changing lineup between Friday and Saturday games.
 - Only Friday and Saturday games will be considered into total weekend score.
 - We will not play every weekend to account for the time the colleges don't play. The weeks we will not play are Thanksgiving and Winter break: 11/28-11/29, 12/12-12/13, 12/19-12/20, 12/26-12/27, 1/2-1/3.
-- Playoffs will be top 6 teams. First place and second place get a bye. First week of playoffs is 2/13-2/14. Championship matchup is 2/27-2/28.
+- Playoffs will be top 6 teams. First place and second place get a first round bye. First week of playoffs is 2/13-2/14. Championship matchup is 2/27-2/28.
 - Winner will get choice of Frozen Four merch in Vegas!
 """)
