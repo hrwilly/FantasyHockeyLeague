@@ -92,7 +92,7 @@ if available_players.empty:
     st.warning("No available players left!")
 else:
     display_df = available_players.drop(columns=["drafted_by"])
-    st.dataframe(display_df, width='stretch', use_container_width=False)
+    st.dataframe(display_df, width='stretch')
 
 # --- Roster and bench limits ---
 roster_template = {"F": 6, "D": 4, "G": 2}
