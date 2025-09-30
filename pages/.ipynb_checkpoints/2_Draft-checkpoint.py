@@ -131,19 +131,14 @@ if not available_players_team.empty:
     chosen_player = label_to_name[selected_label]
 
     if st.button("Draft Player", key="draft_player_button"):
-        # Update dataframe immediately
         idx = players["Name"] == chosen_player
         players.loc[idx, "drafted_by"] = selected_team
-        st.session_state.players = players  # update session_state
-
-        # Save only the drafted player to DB
         db_utils.save_player(players.loc[idx].iloc[0])
-
-        st.success(f"{selected_team} drafted {chosen_player}!")
-
-        # Reload players for consistent display
+    
+        # Reload the full players table from Supabase
         players = db_utils.load_players()
-        st.session_state.players = players
+        
+        st.success(f"{selected_team} drafted {chosen_player}!")
 
 else:
     st.info("Roster is full. You cannot draft more players.")
