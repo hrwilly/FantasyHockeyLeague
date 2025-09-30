@@ -122,38 +122,32 @@ available_players_team = available_players[available_players.apply(can_draft_pla
 # --- Draft Controls ---
 st.subheader("Draft Controls")
 
-# Persistent button state
-if "draft_triggered" not in st.session_state:
-    st.session_state.draft_triggered = False
+if not available_players_team.empty:
+    available_players_team["label"] = available_players_team.apply(
+        lambda row: f"{row['Name']} — {row['Pos.']} — {row['team']}", axis=1
+    )
+    label_to_name = dict(zip(available_players_team["label"], available_players_team["Name"]))
 
-if selected_team == current_team:
-    if not available_players_team.empty:
-        # Labels: "Name — Pos — Team"
-        available_players_team["label"] = available_players_team.apply(
-            lambda row: f"{row['Name']} — {row['Pos.']} — {row['team']}", axis=1
-        )
-        label_to_name = dict(zip(available_players_team["label"], available_players_team["Name"]))
+    selected_label = st.selectbox(
+        "Select a player to draft:",
+        options=available_players_team["label"].tolist(),
+        key="player_select_dropdown"
+    )
+    chosen_player = label_to_name[selected_label]
 
-        selected_label = st.selectbox(
-            "Select a player to draft:",
-            options=available_players_team["label"].tolist(),
-            key="player_select_dropdown"
-        )
-        chosen_player = label_to_name[selected_label]
+    if st.button("Draft Player", key="draft_player_button"):
+        # Update local players DataFrame
+        idx = players["Name"] == chosen_player
+        players.loc[idx, "Pick_Number"] = st.session_state.pick_number
+        players.loc[idx, "drafted_by"] = selected_team
+        st.session_state.pick_number += 1
 
-        if st.button("Draft Player", key="draft_player_button"):
-            st.session_state.draft_triggered = True
+        # Upsert only the drafted player
+        db_utils.save_player(players.loc[idx].iloc[0])
+        st.success(f"{selected_team} drafted {chosen_player}!")
 
-        if st.session_state.draft_triggered:
-            idx = players["Name"] == chosen_player
-            players.loc[idx, "Pick_Number"] = st.session_state.pick_number
-            players.loc[idx, "drafted_by"] = selected_team
-            st.session_state.pick_number += 1
-        
-            # Upsert only the drafted player
-            db_utils.save_player(players.loc[idx].iloc[0])
-            st.success(f"{selected_team} drafted {chosen_player}!")
-            st.session_state.draft_triggered = False
+        # Reload my_team_players from updated players
+        my_team_players = players[players["drafted_by"] == selected_team]
     else:
         st.info("Roster is full. You cannot draft more players.")
 else:
