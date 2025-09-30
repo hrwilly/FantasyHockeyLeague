@@ -7,6 +7,8 @@ st.write("Welcome to the league!")
 st.write("Use the sidebar to navigate between pages.")
 
 st.subheader("Scoring Breakdown:")
+st.write("Goals: 2pts each/n"+
+          "Assists: 1pt each")
 
 st.subheader("Rules:")
 
