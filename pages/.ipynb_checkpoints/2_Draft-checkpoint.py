@@ -16,12 +16,12 @@ if teams.empty:
 
 num_teams = len(teams)
 
-# --- Load players from DB ---
-players = db_utils.load_players()
+# --- Load latest players from DB ---
+players_db = db_utils.load_players()
 
-# --- Drafted players & current pick ---
-drafted_players = players[players["drafted_by"].notna()]
-current_pick_number = len(drafted_players) + 1  # next pick
+# --- Drafted players & current pick from DB ---
+drafted_players = players_db[players_db["drafted_by"].notna()]
+current_pick_number = len(drafted_players) + 1
 num_rounds = 17
 total_allowed_picks = num_rounds * num_teams
 
@@ -29,7 +29,7 @@ if current_pick_number > total_allowed_picks:
     st.info("Draft is complete! No more picks.")
     st.stop()
 
-# --- Snake draft order ---
+# --- Snake draft order function ---
 def get_snake_order(round_num, team_list):
     return team_list if round_num % 2 == 1 else list(reversed(team_list))
 
@@ -72,6 +72,11 @@ for col, (rnd, team) in zip(cols, upcoming_picks):
 st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
 selected_team = st.session_state["team_name"]
 
+# --- Keep session_state players for local UI interactions ---
+if "players" not in st.session_state:
+    st.session_state.players = players_db.copy()
+players = st.session_state.players
+
 # --- Available players ---
 available_players = players[players["drafted_by"].isna()].copy()
 available_players = available_players.sort_values(
@@ -82,8 +87,7 @@ st.subheader("Available Players")
 if available_players.empty:
     st.warning("No available players left!")
 else:
-    display_df = available_players.drop(columns=["drafted_by"])
-    st.dataframe(display_df, width='stretch')
+    st.dataframe(available_players.drop(columns=["drafted_by"]), width='stretch')
 
 # --- Roster and bench limits ---
 roster_template = {"F": 6, "D": 4, "G": 2}
@@ -126,16 +130,21 @@ selected_label = st.selectbox(
 )
 chosen_player = label_to_name[selected_label]
 
-# --- Draft Player Button Logic ---
+# --- Draft Player Button ---
 if st.button("Draft Player", key="draft_player_button"):
-    latest_players = db_utils.load_players()  # get fresh DB state
+    latest_players = db_utils.load_players()  # ensure latest DB state
 
     if latest_players.loc[latest_players["Name"] == chosen_player, "drafted_by"].isna().all():
+        # Draft player
         idx = players["Name"] == chosen_player
         players.loc[idx, "Pick_Number"] = current_pick_number
         players.loc[idx, "drafted_by"] = selected_team
 
+        # Save to DB
         db_utils.save_player(players.loc[idx].iloc[0])
+
+        # Update local session_state
+        st.session_state.players = players.copy()
         st.success(f"{selected_team} drafted {chosen_player}!")
     else:
         st.warning(f"{chosen_player} has already been drafted!")
