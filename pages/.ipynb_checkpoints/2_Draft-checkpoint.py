@@ -66,8 +66,7 @@ for col, (rnd, team) in zip(cols, upcoming_picks):
     )
 
 # --- Select your team ---
-if "team_name" not in st.session_state:
-    st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
+st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
 selected_team = st.session_state["team_name"]
 
 # --- Available players ---
