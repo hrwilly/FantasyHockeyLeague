@@ -38,6 +38,7 @@ def compute_fantasy_points(data):
     Apply your scoring rules to a DataFrame with player stats.
     """
     scored = data.copy()
+    scores = scored.drop('team', axis = 1)
 
     for col, multiplier in {
         'G': 2,
@@ -60,7 +61,7 @@ def compute_fantasy_points(data):
             scored[col] = scored[col] * multiplier
 
     # Sum total fantasy points
-    scored['FantasyPoints'] = scored.drop('team', axis = 1).sum(axis=1)
+    scored['FantasyPoints'] = scored.sum(axis=1)
     return scored
 
 # --- Run Weekly Scoring ---
