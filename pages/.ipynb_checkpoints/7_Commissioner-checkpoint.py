@@ -10,7 +10,7 @@ def get_team_names():
     url = r'https://collegehockeyinc.com/teams'
     college_teams = pd.read_html(url)[0]
     college_teams = college_teams['Name'].drop([0, 1, 5, 59]).dropna().reset_index(drop=True)
-    return college_teams
+    return pd.DataFrame(college_teams)
 
 def get_current_data(team):
     url = f'https://collegehockeyinc.com/teams/{team}/stats26-overall.php'
