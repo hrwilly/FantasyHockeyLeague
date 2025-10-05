@@ -80,8 +80,6 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
 
     st.write("👉 Debug: Points DataFrame", points)
 
-    resp = db_utils.save_weekly_scoring(points)
-    if resp and hasattr(resp, "data"):
-        st.success(f"✅ Weekly scoring saved for {date.today().strftime('%Y-%m-%d')}")
-    else:
-        st.error("❌ Failed to save weekly scoring. Check logs.")
+    db_utils.save_weekly_scoring(points)
+    st.success(f"✅ Weekly scoring saved for {date.today().strftime('%Y-%m-%d')}")
+
