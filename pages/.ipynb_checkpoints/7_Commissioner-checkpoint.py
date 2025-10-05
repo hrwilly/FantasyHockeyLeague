@@ -98,19 +98,19 @@ if st.button("🏁 Run Weekly Scoring"):
         #db_utils.save_last_week_stats(current_cum)
     
         # 2. Prepare fantasy scoring DataFrame
-        '''points = pd.merge(
-            current_cum[['Name', 'team']],
-            weekly_scored[['Name', 'FantasyPoints']],
-            on='Name',
-            how='outer'
-        )
+        #points = pd.merge(
+        #    current_cum[['Name', 'team']],
+        #    weekly_scored[['Name', 'FantasyPoints']],
+        #    on='Name',
+        #    how='outer'
+        #)
     
-        st.write("👉 Debug: Points DataFrame", points)  # helpful to see if merge worked
+        #st.write("👉 Debug: Points DataFrame", points)  # helpful to see if merge worked
     
         # 3. Save weekly scoring
-        resp = db_utils.save_weekly_scoring(points)
+        #resp = db_utils.save_weekly_scoring(points)
     
-        if resp and hasattr(resp, "data"):
-            st.success(f"✅ Weekly scoring saved for {date.today().strftime('%Y-%m-%d')}")'''
-        else:
-            st.error("❌ Failed to save weekly scoring. Check logs.")
+        #if resp and hasattr(resp, "data"):
+        #    st.success(f"✅ Weekly scoring saved for {date.today().strftime('%Y-%m-%d')}")
+        #else:
+        #    st.error("❌ Failed to save weekly scoring. Check logs.")
