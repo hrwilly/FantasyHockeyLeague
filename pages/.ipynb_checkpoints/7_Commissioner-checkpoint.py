@@ -93,7 +93,7 @@ if st.button("🏁 Run Weekly Scoring"):
         st.markdown('Saving points...')
     
         # 1. Save cumulative stats snapshot
-        db_utils.save_last_week_stats(current_cum.reset_index())
+        db_utils.save_last_week_stats(current_cum)
     
         # 2. Prepare fantasy scoring DataFrame
         points = pd.merge(
