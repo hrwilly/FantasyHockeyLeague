@@ -69,7 +69,7 @@ if st.button("🏁 Run Weekly Scoring"):
     coll_teams = get_team_names()
     current_cum = pd.DataFrame()
 
-    for team in col_teams.Name):
+    for team in col_teams.Name:
         try:
             team_points = get_current_data(team[:-1])
             current_cum = pd.concat([current_cum, team_points])
