@@ -57,9 +57,9 @@ def save_weekly_scores(df):
         return None
 
     # Optional: Clear previous scores if you only keep latest week
-    supabase.table("weekly_scores").delete().neq("Name", "").execute()
+    supabase.table("points").delete().neq("Name", "").execute()
 
     # Insert new scores
-    response = supabase.table("weekly_scores").insert(records).execute()
+    response = supabase.table("points").insert(records).execute()
     return response
 
