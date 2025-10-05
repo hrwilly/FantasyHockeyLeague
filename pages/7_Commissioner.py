@@ -79,8 +79,8 @@ if st.button("🏁 Run Weekly Scoring"):
 
     last_week = db_utils.load_last_week_stats()
 
-    current_cum = current_cum.set_index("Name")
-    last_week = last_week.set_index("Name")
+    #current_cum = current_cum.set_index("Name")
+    #last_week = last_week.set_index("Name")
     weekly_stats = current_cum.copy()
     overlapping_cols = current_cum.columns.intersection(last_week.columns)
     weekly_stats[overlapping_cols] = current_cum[overlapping_cols].fillna(0) - last_week[overlapping_cols].fillna(0)
