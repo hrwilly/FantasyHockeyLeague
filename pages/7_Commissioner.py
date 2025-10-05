@@ -82,7 +82,7 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
         current_cum.reset_index()[['Name', 'team']],
         weekly_scored.reset_index()[['Name', 'FantasyPoints']],
         on='Name',
-        how='outer'
+        how='right'
     )
 
     st.write("👉 Debug: Points DataFrame", points)
