@@ -47,12 +47,15 @@ def save_last_week_stats(df: pd.DataFrame):
     supabase.table("last_week_stats").upsert(data).execute()
 
 
-def save_weekly_scores(df, week=None):
+def save_weekly_scoring(df, week=None):
     """
-    Upsert (insert or update) weekly fantasy scores into the database.
-    Expected columns in df: Name, Team, FantasyPoints
-    Uses 'Name' and 'Week' as the unique key.
+    Upserts weekly fantasy points into the weekly_scores table.
+    Expects columns: Name, team, FantasyPoints.
     """
+    if df.empty:
+        print("[save_weekly_scoring] No data to save.")
+        return None
+
     if week is None:
         week = str(date.today())
 
@@ -60,12 +63,15 @@ def save_weekly_scores(df, week=None):
     df["Week"] = week
 
     records = df.to_dict(orient="records")
-    if not records:
+    print(f"[save_weekly_scoring] Upserting {len(records)} records")
+
+    try:
+        response = supabase.table("points")\
+            .upsert(records, on_conflict=["Name", "Week"])\
+            .execute()
+
+        print("[save_weekly_scoring] Response:", response)
+        return response
+    except Exception as e:
+        print("[save_weekly_scoring] Error:", e)
         return None
-
-    response = supabase.table("points")\
-        .upsert(records, on_conflict=["Name", "Week"])\
-        .execute()
-
-    return response
-
