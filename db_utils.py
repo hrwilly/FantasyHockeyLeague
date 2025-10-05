@@ -34,3 +34,15 @@ def save_player(row):
     row_clean = row.where(pd.notna(row), None)
     supabase.table("players").upsert(row_clean.to_dict()).execute()
 
+def load_last_week_stats():
+    res = supabase.table("last_week_stats").select("*").execute()
+    if res.data:
+        return pd.DataFrame(res.data)
+    return pd.DataFrame()
+
+def save_last_week_stats(df: pd.DataFrame):
+    if df.empty:
+        return
+    data = df.to_dict(orient="records")
+    supabase.table("last_week_stats").upsert(data).execute()
+
