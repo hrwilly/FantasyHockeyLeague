@@ -38,7 +38,6 @@ def compute_fantasy_points(data):
     Apply your scoring rules to a DataFrame with player stats.
     """
     scored = data.copy()
-    st.markdown(scored)
 
     for col, multiplier in {
         'G': 2,
@@ -83,13 +82,16 @@ if st.button("🏁 Run Weekly Scoring"):
     last_week = last_week.set_index("Name")
     weekly_stats = current_cum.copy()
     weekly_stats = (weekly_stats.drop('team', axis = 1) - last_week.drop('team', axis = 1)).fillna(0.0)
-    #weekly_stats = weekly_stats.reset_index()
     
     # Step 2: Compute fantasy points
     weekly_scored = compute_fantasy_points(weekly_stats)
-    
-    # Step 3: Save weekly stats
-    #current_cum.to_csv("data/last_week_stats.csv", index=False)  # update last_week
+
+    if st.button('Save Scoring'):
+        # --- Save current cumulative stats as "last_week" for next run ---
+        db_utils.save_last_week_stats(current_cum.reset_index())
+
+        points = pd.merge(current_cum[['Name', 'team']], weekly_scored[['Name', 'FantasyPoints']], on = 'Name', how = 'outer')
+        db_utils.save_weekly_scoring(points)
     
     st.success(f"✅ Weekly scoring updated for {date.today().strftime('%Y-%m-%d')}")
     st.dataframe(weekly_scored.head(50))
