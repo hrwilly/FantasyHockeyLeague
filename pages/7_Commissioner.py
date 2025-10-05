@@ -38,7 +38,7 @@ def compute_fantasy_points(data):
     Apply your scoring rules to a DataFrame with player stats.
     """
     scored = data.copy()
-    scored = scored.drop('team', axis = 1)
+    st.markdown(scored)
 
     for col, multiplier in {
         'G': 2,
