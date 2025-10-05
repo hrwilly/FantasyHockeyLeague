@@ -51,7 +51,7 @@ if st.button("🏁 Run Weekly Scoring"):
     coll_teams = get_team_names()
     current_cum = pd.DataFrame()
 
-    st.dataframe(coll_teams)
+    st.markdown(coll_teams['Name'])
 
     for team in coll_teams.Name:
         try:
