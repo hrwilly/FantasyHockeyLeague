@@ -38,7 +38,7 @@ def compute_fantasy_points(data):
     Apply your scoring rules to a DataFrame with player stats.
     """
     scored = data.copy()
-    scores = scored.drop('team', axis = 1)
+    scored = scored.drop('team', axis = 1)
 
     for col, multiplier in {
         'G': 2,
@@ -76,7 +76,7 @@ if st.button("🏁 Run Weekly Scoring"):
             team_points = get_current_data(team[:-1])
             current_cum = pd.concat([current_cum, team_points])
         except Exception as e:
-            st.warning(f"Skipping team {team}: {e}")
+            st.warning(f"Skipping team {team[:-1]}: {e}")
 
     last_week = db_utils.load_last_week_stats()
 
