@@ -65,6 +65,7 @@ def compute_fantasy_points(data):
 
 # --- Run Weekly Scoring ---
 if st.button("🏁 Run Weekly Scoring"):
+    st.markdown('Running scoring...')
 
     coll_teams = get_team_names()
     current_cum = pd.DataFrame()
