@@ -47,19 +47,25 @@ def save_last_week_stats(df: pd.DataFrame):
     supabase.table("last_week_stats").upsert(data).execute()
 
 
-def save_weekly_scores(df):
+def save_weekly_scores(df, week=None):
     """
-    Save a DataFrame of weekly fantasy scores to the database.
-    Expected columns: Name, Team, FantasyPoints
+    Upsert (insert or update) weekly fantasy scores into the database.
+    Expected columns in df: Name, Team, FantasyPoints
+    Uses 'Name' and 'Week' as the unique key.
     """
+    if week is None:
+        week = str(date.today())
+
+    df = df.copy()
+    df["Week"] = week
+
     records = df.to_dict(orient="records")
     if not records:
         return None
 
-    # Optional: Clear previous scores if you only keep latest week
-    supabase.table("points").delete().neq("Name", "").execute()
+    response = supabase.table("points")\
+        .upsert(records, on_conflict=["Name", "Week"])\
+        .execute()
 
-    # Insert new scores
-    response = supabase.table("points").insert(records).execute()
     return response
 
