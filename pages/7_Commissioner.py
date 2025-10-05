@@ -91,9 +91,11 @@ if st.button("🏁 Run Weekly Scoring"):
 
     if st.button('💾 Save Scoring'):
         st.markdown('Saving points...')
+
+        st.write("👉 Debug: Points DataFrame", points)  # helpful to see if merge worked
     
         # 1. Save cumulative stats snapshot
-        db_utils.save_last_week_stats(current_cum)
+        #db_utils.save_last_week_stats(current_cum)
     
         # 2. Prepare fantasy scoring DataFrame
         points = pd.merge(
