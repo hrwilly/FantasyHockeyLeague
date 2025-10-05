@@ -78,12 +78,7 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
     current_cum = st.session_state['current_cum']
     weekly_scored = st.session_state['weekly_scored']
 
-    points = pd.merge(
-        current_cum.reset_index()[['Name', 'team']],
-        weekly_scored.reset_index()[['Name', 'FantasyPoints']],
-        on='Name',
-        how='right'
-    )
+    points = pd.concat(current_cum['team'], weekly_scored['FantasyPoints'])
 
     st.write("👉 Debug: Points DataFrame", points)
 
