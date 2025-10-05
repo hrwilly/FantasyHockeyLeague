@@ -59,8 +59,8 @@ if st.button("🏁 Run Weekly Scoring"):
             st.warning(f"Skipping team {team[:-1]}: {e}")
 
     last_week = db_utils.load_last_week_stats()
-    last_week = last_week.set_index("Name")
-    weekly_stats = (current_cum.drop('team', axis=1) - last_week.drop('team', axis=1)).fillna(0.0)
+    last_week = last_week.set_index(["Name", "team"])
+    weekly_stats = (current_cum - last_week).fillna(0.0)
 
     weekly_scored = compute_fantasy_points(weekly_stats)
 
@@ -75,10 +75,7 @@ if st.button("🏁 Run Weekly Scoring"):
 if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
     st.markdown('Saving points...')
 
-    current_cum = st.session_state['current_cum']
-    weekly_scored = st.session_state['weekly_scored']
-
-    points = pd.concat(current_cum['team'], weekly_scored['FantasyPoints'])
+    points = st.session_state['weekly_scored']
 
     st.write("👉 Debug: Points DataFrame", points)
 
