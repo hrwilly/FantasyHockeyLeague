@@ -60,7 +60,7 @@ def compute_fantasy_points(data):
             scored[col] = scored[col] * multiplier
 
     # Sum total fantasy points
-    scored['FantasyPoints'] = scored.sum(axis=1)
+    scored['FantasyPoints'] = scored.drop('team', axis = 1).sum(axis=1)
     return scored
 
 # --- Run Weekly Scoring ---
@@ -82,7 +82,7 @@ if st.button("🏁 Run Weekly Scoring"):
     last_week = last_week.set_index("Name")
     weekly_stats = current_cum.copy()
     weekly_stats = (weekly_stats.drop('team', axis = 1) - last_week.drop('team', axis = 1)).fillna(0.0)
-    weekly_stats = weekly_stats.reset_index()
+    #weekly_stats = weekly_stats.reset_index()
     
     # Step 2: Compute fantasy points
     weekly_scored = compute_fantasy_points(weekly_stats)
