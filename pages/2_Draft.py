@@ -35,7 +35,7 @@ if "pick_number" not in st.session_state:
 
 # --- Snake draft order ---
 num_teams = len(teams)
-drafted_players = players[players["drafted_by"].notna()]
+drafted_players = players[players["held_by"].notna()]
 total_picks = len(drafted_players)
 
 def get_snake_order(round_num, team_list):
@@ -87,7 +87,7 @@ st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_na
 selected_team = st.session_state["team_name"]
 
 # --- Available players ---
-available_players = players[players["drafted_by"].isna()].copy()
+available_players = players[players["held_by"].isna()].copy()
 available_players = available_players.sort_values(
     by="Draft Round", key=lambda col: pd.to_numeric(col, errors="coerce"), na_position="last"
 )
@@ -96,13 +96,13 @@ st.subheader("Available Players")
 if available_players.empty:
     st.warning("No available players left!")
 else:
-    display_df = available_players.drop(columns=["drafted_by"])
+    display_df = available_players.drop(columns=["held_by"])
     st.dataframe(display_df, width='stretch')
 
 # --- Roster and bench limits ---
 roster_template = {"F": 6, "D": 4, "G": 2}
 num_bench = 5
-my_team_players = players[players["drafted_by"] == selected_team]
+my_team_players = players[players["held_by"] == selected_team]
 
 starting_counts = {pos: 0 for pos in roster_template.keys()}
 bench_count = 0
@@ -150,8 +150,7 @@ if st.button("Draft Player", key="draft_player_button"):
 # --- Handle draft action ---
 if st.session_state.draft_triggered:
     idx = players["Name"] == chosen_player
-    players.loc[idx, "Pick_Number"] = st.session_state.pick_number
-    players.loc[idx, "drafted_by"] = selected_team
+    players.loc[idx, "held_by"] = selected_team
     st.session_state.pick_number += 1
 
     # Upsert only the drafted player
@@ -164,7 +163,7 @@ if st.session_state.draft_triggered:
 
 # --- My Roster with Bench ---
 st.subheader("My Roster")
-my_team_players = players[players["drafted_by"] == selected_team]
+my_team_players = players[players["held_by"] == selected_team]
 
 roster_rows = []
 for pos, slots in roster_template.items():
@@ -194,11 +193,10 @@ st.table(my_roster)
 
 # --- Draft Board ---
 st.subheader("Draft Board")
-draft_board = players[players["drafted_by"].notna()].copy()
-if not draft_board.empty:
-    draft_board = draft_board.sort_values("Pick_Number")
+draft_board = players[players["held_by"].notna()].copy()
+if not draft_board.empty:er")
     st.dataframe(
-        draft_board[["Pick_Number", "Name", "Pos.", "team", "drafted_by"]],
+        draft_board[["Name", "Pos.", "team", "held_by"]],
         width='stretch'
     )
 else:
