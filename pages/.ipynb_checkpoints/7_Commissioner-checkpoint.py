@@ -22,11 +22,12 @@ def get_current_data(team):
 
     points = pd.concat([offense, goalies], axis=1).reset_index()
     points[['Name', 'Pos.', 'Yr']] = points['Name, Yr'].str.split(',', expand=True)
-    points.index = points['Name']
+    points['team'] = team
+    points.index = points['Name', 'team']
 
     stats_cols = ['G','A','Shots','PIM','GWG','PPG','SHG','+/-','FOW','FOL','BLK','W','GA','SV','SO']
     points = points[stats_cols].fillna(0)
-    points['team'] = team
+
     return points
 
 def compute_fantasy_points(data):
@@ -60,7 +61,6 @@ if st.button("🏁 Run Weekly Scoring"):
 
     last_week = db_utils.load_last_week_stats()
     last_week = last_week.set_index(["Name", "team"])
-    current_cum = current_cum.reset_index().set_index(['Name', 'team'])
     weekly_stats = (current_cum - last_week).fillna(0.0)
 
     weekly_scored = compute_fantasy_points(weekly_stats)
@@ -77,8 +77,6 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
     st.markdown('Saving points...')
 
     points = st.session_state['weekly_scored']
-
-    st.write("👉 Debug: Points DataFrame", points)
 
     db_utils.save_weekly_scoring(points)
     st.success(f"✅ Weekly scoring saved for {date.today().strftime('%Y-%m-%d')}")
