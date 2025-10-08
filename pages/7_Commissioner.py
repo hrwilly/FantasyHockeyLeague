@@ -77,7 +77,7 @@ if st.button("🏁 Run Weekly Scoring"):
 
     st.success(f"✅ Weekly scoring calculated for {date.today().strftime('%Y-%m-%d')}")
     st.dataframe(weekly_scored.head(50))
-    st.markdown(f'{len(weekly_scored[['Name', 'team']].unique()}')
+    st.markdown(str(len(weekly_scored[['Name', 'team']].unique()))
 
 # --- Save Weekly Scoring ---
 if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
