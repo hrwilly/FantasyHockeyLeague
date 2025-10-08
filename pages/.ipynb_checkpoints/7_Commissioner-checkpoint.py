@@ -23,7 +23,7 @@ def get_current_data(team):
     points = pd.concat([offense, goalies], axis=1).reset_index()
     points[['Name', 'Pos.', 'Yr']] = points['Name, Yr'].str.split(',', expand=True)
     points['team'] = team
-    points.index = points['Name', 'team']
+    points = points.set_index(['Name', 'team'])
 
     stats_cols = ['G','A','Shots','PIM','GWG','PPG','SHG','+/-','FOW','FOL','BLK','W','GA','SV','SO']
     points = points[stats_cols].fillna(0)
