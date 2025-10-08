@@ -20,7 +20,7 @@ def get_current_data(team):
     offense = offense[offense['Name, Yr'] != 'TOTAL']
     goalies = goalies[goalies['Name, Yr'] != 'TOTALS']
 
-    points = pd.merge(offense, goalies, on = 'Name, Yr', how = 'full')
+    points = pd.merge(offense, goalies, on = 'Name, Yr', how = 'outer')
     points[['Name', 'Pos.', 'Yr']] = points['Name, Yr'].str.split(',', expand=True)
     points['team'] = team
     points = points.set_index(['Name', 'team'])
