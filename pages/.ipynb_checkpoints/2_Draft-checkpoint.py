@@ -194,7 +194,7 @@ st.table(my_roster)
 # --- Draft Board ---
 st.subheader("Draft Board")
 draft_board = players[players["held_by"].notna()].copy()
-if not draft_board.empty:er")
+if not draft_board.empty:
     st.dataframe(
         draft_board[["Name", "Pos.", "team", "held_by"]],
         width='stretch'
