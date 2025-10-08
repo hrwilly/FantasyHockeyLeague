@@ -65,7 +65,7 @@ for i in range(num_upcoming):
 
 cols = st.columns(num_upcoming)
 for col, (rnd, team) in zip(cols, upcoming_picks):
-    short_name = team[:5]
+    short_name = team[:10]
     col.markdown(
         f"""
         <div style="
