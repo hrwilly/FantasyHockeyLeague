@@ -67,24 +67,4 @@ def save_weekly_points(df, week=None):
 
     # Convert to list of dicts for Supabase
     records = df.to_dict(orient="records")
-    print(f"[save_weekly_points] Upserting {len(records)} records into 'points'")
-
-    try:
-        response = supabase.table("points") \
-            .upsert(records, on_conflict=["Name", "Week"]) \
-            .execute()
-
-        # Handle response
-        if hasattr(response, "error") and response.error:
-            print("[save_weekly_points] Supabase error:", response.error)
-        else:
-            print("[save_weekly_points] Upsert successful.")
-            if hasattr(response, "data"):
-                print("[save_weekly_points] Rows affected:", len(response.data))
-        return response
-
-    except Exception as e:
-        import traceback
-        print("[save_weekly_points] Exception:", e)
-        traceback.print_exc()
-        return None
+    supabase.table("points").upsert(records, on_conflict=["Name", "Week"]).execute()
