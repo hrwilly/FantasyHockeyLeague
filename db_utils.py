@@ -48,31 +48,43 @@ def save_last_week_stats(df: pd.DataFrame):
     supabase.table("last_week_stats").upsert(data).execute()
 
 
-def save_weekly_scoring(df, week=None):
+def save_weekly_points(df, week=None):
     """
-    Upserts weekly fantasy points into the weekly_scores table.
-    Expects columns: Name, team, FantasyPoints.
+    Saves (upserts) weekly fantasy points to the 'points' table in Supabase.
+    Expects DataFrame columns: Name, team, FantasyPoints.
     """
     if df.empty:
-        print("[save_weekly_scoring] No data to save.")
+        print("[save_weekly_points] No data to save.")
         return None
 
+    # Use today's date as the week if none provided
     if week is None:
         week = str(date.today())
 
+    # Copy to avoid modifying original
     df = df.copy()
     df["Week"] = week
 
+    # Convert to list of dicts for Supabase
     records = df.to_dict(orient="records")
-    print(f"[save_weekly_scoring] Upserting {len(records)} records")
+    print(f"[save_weekly_points] Upserting {len(records)} records into 'points'")
 
     try:
-        response = supabase.table("points")\
-            .upsert(records, on_conflict=["Name", "Week"])\
+        response = supabase.table("points") \
+            .upsert(records, on_conflict=["Name", "Week"]) \
             .execute()
 
-        print("[save_weekly_scoring] Response:", response)
+        # Handle response
+        if hasattr(response, "error") and response.error:
+            print("[save_weekly_points] Supabase error:", response.error)
+        else:
+            print("[save_weekly_points] Upsert successful.")
+            if hasattr(response, "data"):
+                print("[save_weekly_points] Rows affected:", len(response.data))
         return response
+
     except Exception as e:
-        print("[save_weekly_scoring] Error:", e)
+        import traceback
+        print("[save_weekly_points] Exception:", e)
+        traceback.print_exc()
         return None
