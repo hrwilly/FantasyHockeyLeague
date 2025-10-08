@@ -84,6 +84,6 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
 
     points = st.session_state['weekly_scored']
 
-    db_utils.save_weekly_scoring(points)
+    db_utils.save_weekly_points(points)
     st.success(f"✅ Weekly scoring saved for {date.today().strftime('%Y-%m-%d')}")
 
