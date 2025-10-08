@@ -17,11 +17,17 @@ def get_current_data(team):
     offense = pd.read_html(url)[0]['Scoring']
     goalies = pd.read_html(url)[1]['Goaltending']
 
+    offense = pd.read_html(url)[0]['Scoring']
+    goalies = pd.read_html(url)[1]['Goaltending']
+    
     offense = offense[offense['Name, Yr'] != 'TOTAL']
     goalies = goalies[goalies['Name, Yr'] != 'TOTALS']
-
-    points = pd.merge(offense, goalies, on = 'Name, Yr', how = 'outer', coalesce = True)
-    points[['Name', 'Pos.', 'Yr']] = points['Name, Yr'].str.split(',', expand=True)
+    
+    offense[['Name', 'Pos.', 'Yr']] = offense['Name, Yr'].str.split(',', expand=True)
+    goalies[['Name', 'Yr']] = goalies['Name, Yr'].str.split(',', expand=True)
+    
+    points = pd.merge(offense, goalies, on = ['Name', 'Yr', 'GP'], how = 'outer')
+    points = points.drop(['Name, Yr_x', 'Name, Yr_y'], axis = 1)
     points['team'] = team
     points = points.set_index(['Name', 'team'])
 
