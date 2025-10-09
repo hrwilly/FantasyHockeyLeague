@@ -52,15 +52,20 @@ st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_na
 selected_team = st.session_state["team_name"]
 
 # --- Available players ---
-available_players = draft_board[draft_board["FantasyTeam"].isna()].copy()
-available_players = available_players.sort_values(by=["Round", "Pick"])
+# --- Load players into session_state once ---
+if "players" not in st.session_state:
+    st.session_state.players = db_utils.load_players()
+players = st.session_state.players
+
+available_players = players[players["held_by"].isna()].copy()
+available_players = available_players.sort_values(by="Draft Round", key=lambda col: pd.to_numeric(col, errors="coerce"), na_position="last"
 
 st.subheader("Available Players")
 if available_players.empty:
     st.warning("No available players left!")
 else:
     st.dataframe(
-        available_players[["Name", "Pos.", "team", "Round", "Pick"]],
+        available_players.drop('held_by', axis = 1),
         width='stretch'
     )
 
