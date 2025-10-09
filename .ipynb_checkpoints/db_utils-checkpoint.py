@@ -37,7 +37,7 @@ def load_draft_board() -> pd.DataFrame:
     Pulls the DraftBoard table from Supabase and returns a DataFrame.
     Columns: Round, Pick, Name, team, Pos., FantasyTeam
     """
-    response = supabase.table("DraftBoard").select("*").order("Round", ascending=True).order("Pick", ascending=True).execute()
+    response = supabase.table("DraftBoard").select("*").execute()
     
     if response.status_code != 200:
         raise Exception(f"Failed to load draft board: {response.json()}")
