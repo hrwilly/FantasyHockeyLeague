@@ -77,7 +77,7 @@ if st.button("🏁 Run Weekly Scoring"):
 
     st.success(f"✅ Weekly scoring calculated for {date.today().strftime('%Y-%m-%d')}")
     st.dataframe(weekly_scored.head(50))
-    st.dataframe(current_cum)
+    st.dataframe(current_cum.head(50))
 
 # --- Save Weekly Scoring ---
 if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
@@ -89,7 +89,7 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
 
     current_cum = st.session_state['current_cum']
 
-    #db_utils.save_weekly_points(points)
+    db_utils.save_weekly_points(points)
     db_utils.save_last_week_stats(current_cum)
     st.success(f"✅ Weekly scoring saved for {date.today().strftime('%Y-%m-%d')}")
 

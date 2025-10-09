@@ -31,6 +31,43 @@ def load_players():
     res = supabase.table("players").select("*").execute()
     return pd.DataFrame(res.data)
 
+# --- Load the full draft board ---
+def load_draft_board() -> pd.DataFrame:
+    """
+    Pulls the DraftBoard table from Supabase and returns a DataFrame.
+    Columns: Round, Pick, Name, team, Pos., FantasyTeam
+    """
+    response = supabase.table("DraftBoard").select("*").order("Round", ascending=True).order("Pick", ascending=True).execute()
+    
+    if response.status_code != 200:
+        raise Exception(f"Failed to load draft board: {response.json()}")
+    
+    data = response.data
+    df = pd.DataFrame(data)
+    
+    # Ensure correct column types
+    df["Round"] = pd.to_numeric(df["Round"], errors="coerce")
+    df["Pick"] = pd.to_numeric(df["Pick"], errors="coerce")
+    df["FantasyTeam"] = df.get("FantasyTeam")  # could be null
+    return df
+
+# --- Update a draft pick ---
+def update_draft_pick(player_name: str, fantasy_team: str):
+    """
+    Assigns a player to a FantasyTeam in Supabase.
+    """
+    response = (
+        supabase.table("DraftBoard")
+        .update({"FantasyTeam": fantasy_team})
+        .eq("Name", player_name)
+        .execute()
+    )
+    
+    if response.status_code != 200:
+        raise Exception(f"Failed to update draft pick: {response.json()}")
+    
+    return response.data
+
 def save_player(row):
     row_clean = row.where(pd.notna(row), None)
     supabase.table("players").upsert(row_clean.to_dict()).execute()
