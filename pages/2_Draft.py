@@ -48,7 +48,8 @@ for col, (_, row) in zip(cols, next_picks.iterrows()):
     )
 
 # --- Select your team ---
-st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
+#st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
+st.session_state["team_name"] = st.selectbox("Select your team:", ['Hannah', 'Alex', 'Sam', 'Nathan', 'Kieran', 'Jordan', 'Graham', 'Chris', 'Mac', 'Matt', 'Joe', 'Jamie'])
 selected_team = st.session_state["team_name"]
 
 # --- Available players ---
