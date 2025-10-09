@@ -118,13 +118,15 @@ if st.button("Draft Player", key="draft_player_button"):
     players.loc[idx, "held_by"] = selected_team
     st.session_state.players = players.copy()
 
-    # Update DraftBoard in Supabase
+    # Update draft board in Supabase
     db_utils.update_draft_pick(chosen_player, selected_team)
-    st.success(f"{selected_team} drafted {chosen_player}!")
+    
+    # Update draft board in session state immediately
+    idx_board = draft_board["Name"] == chosen_player
+    draft_board.loc[idx_board, "FantasyTeam"] = selected_team
+    st.session_state.draft_board = draft_board
 
-    # Refresh draft board
-    draft_board = load_draft_board()
-    st.experimental_rerun()  # So roster updates immediately
+    st.success(f"{selected_team} drafted {chosen_player}!")
 
 # --- My Roster with Bench ---
 st.subheader(f"{selected_team} Roster")
