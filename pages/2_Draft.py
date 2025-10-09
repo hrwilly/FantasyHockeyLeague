@@ -8,64 +8,29 @@ st.title("🏒 Fantasy Draft Room")
 # --- Auto-refresh every 5 seconds ---
 st_autorefresh(interval=5000, key="draft_autorefresh")
 
-# --- Load teams into session_state once ---
+# --- Load teams ---
 if "teams" not in st.session_state:
     st.session_state.teams = db_utils.load_teams()
 teams = st.session_state.teams
-
 if teams.empty:
     st.warning("No teams registered yet. Go to the Register page first.")
     st.stop()
 
-# --- Load players into session_state once ---
-if "players" not in st.session_state:
-    st.session_state.players = db_utils.load_players()
-players = st.session_state.players
+# --- Load draft board from Supabase ---
+def load_draft_board():
+    df = db_utils.load_draft_board()  # implement this in db_utils
+    return df.sort_values(by=["Round", "Pick"])
 
-# --- Ensure pick counter persists ---
-if "pick_number" not in st.session_state:
-    if "Pick_Number" in players.columns and players["Pick_Number"].dropna().size > 0:
-        try:
-            max_pick = int(players["Pick_Number"].dropna().max())
-            st.session_state.pick_number = max_pick + 1
-        except Exception:
-            st.session_state.pick_number = 1
-    else:
-        st.session_state.pick_number = 1
+draft_board = load_draft_board()
 
-# --- Snake draft order ---
-num_teams = len(teams)
-drafted_players = players[players["held_by"].notna()]
-total_picks = len(drafted_players)
+# --- Current pick and upcoming picks ---
+drafted = draft_board[draft_board["FantasyTeam"].notna()]
+next_picks = draft_board[draft_board["FantasyTeam"].isna()].head(5)
 
-def get_snake_order(round_num, team_list):
-    return team_list if round_num % 2 == 1 else list(reversed(team_list))
-
-current_round = total_picks // num_teams + 1
-current_round_order = get_snake_order(current_round, teams["team_name"].tolist())
-current_pick_index = total_picks % num_teams
-current_team = current_round_order[current_pick_index]
-
-num_rounds = 17
-total_allowed_picks = num_rounds * num_teams
-if total_picks >= total_allowed_picks:
-    st.info("Draft is complete! No more picks.")
-    st.stop()
-
-# --- Upcoming Draft Order ---
 st.subheader("Upcoming Draft Order")
-num_upcoming = 5
-upcoming_picks = []
-for i in range(num_upcoming):
-    next_pick_index = (current_pick_index + i) % num_teams
-    next_round = current_round + ((current_pick_index + i) // num_teams)
-    next_order = get_snake_order(next_round, teams["team_name"].tolist())
-    upcoming_team = next_order[next_pick_index]
-    upcoming_picks.append((next_round, upcoming_team))
-
-cols = st.columns(num_upcoming)
-for col, (rnd, team) in zip(cols, upcoming_picks):
-    short_name = team[:10]
+cols = st.columns(len(next_picks))
+for col, (_, row) in zip(cols, next_picks.iterrows()):
+    short_name = row["team"][:10]
     col.markdown(
         f"""
         <div style="
@@ -76,7 +41,7 @@ for col, (rnd, team) in zip(cols, upcoming_picks):
             border-radius:5px;
             font-weight:bold;
         ">
-            {short_name}<br>R{rnd}
+            {short_name}<br>R{row['Round']} P{row['Pick']}
         </div>
         """,
         unsafe_allow_html=True
@@ -87,116 +52,46 @@ st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_na
 selected_team = st.session_state["team_name"]
 
 # --- Available players ---
-available_players = players[players["held_by"].isna()].copy()
-available_players = available_players.sort_values(
-    by="Draft Round", key=lambda col: pd.to_numeric(col, errors="coerce"), na_position="last"
-)
+available_players = draft_board[draft_board["FantasyTeam"].isna()].copy()
+available_players = available_players.sort_values(by=["Round", "Pick"])
 
 st.subheader("Available Players")
 if available_players.empty:
     st.warning("No available players left!")
 else:
-    display_df = available_players.drop(columns=["held_by"])
-    st.dataframe(display_df, width='stretch')
-
-# --- Roster and bench limits ---
-roster_template = {"F": 6, "D": 4, "G": 2}
-num_bench = 5
-my_team_players = players[players["held_by"] == selected_team]
-
-starting_counts = {pos: 0 for pos in roster_template.keys()}
-bench_count = 0
-for _, row in my_team_players.iterrows():
-    pos = row["Pos."]
-    if pos in roster_template and starting_counts[pos] < roster_template[pos]:
-        starting_counts[pos] += 1
-    else:
-        bench_count += 1
-
-def can_draft_player(player_row):
-    pos = player_row["Pos."]
-    starting_limit = roster_template.get(pos, 0)
-    if pos in roster_template and starting_counts[pos] < starting_limit:
-        return True
-    elif bench_count < num_bench:
-        return True
-    return False
-
-available_players_team = available_players[available_players.apply(can_draft_player, axis=1)]
+    st.dataframe(
+        available_players[["Name", "Pos.", "team", "Round", "Pick"]],
+        width='stretch'
+    )
 
 # --- Draft Controls ---
 st.subheader("Draft Controls")
 
-# Persistent button state
-if "draft_triggered" not in st.session_state:
-    st.session_state.draft_triggered = False
-
-# Labels: "Name — Pos — Team"
-available_players_team["label"] = available_players_team.apply(
+available_players["label"] = available_players.apply(
     lambda row: f"{row['Name']} — {row['Pos.']} — {row['team']}", axis=1
 )
-label_to_name = dict(zip(available_players_team["label"], available_players_team["Name"]))
+label_to_name = dict(zip(available_players["label"], available_players["Name"]))
 
 selected_label = st.selectbox(
     "Select a player to draft:",
-    options=available_players_team["label"].tolist(),
+    options=available_players["label"].tolist(),
     key="player_select_dropdown"
 )
 chosen_player = label_to_name[selected_label]
 
 if st.button("Draft Player", key="draft_player_button"):
-    st.session_state.draft_triggered = True
-
-# --- Handle draft action ---
-if st.session_state.draft_triggered:
-    idx = players["Name"] == chosen_player
-    players.loc[idx, "held_by"] = selected_team
-    st.session_state.pick_number += 1
-
-    # Upsert only the drafted player
-    db_utils.save_player(players.loc[idx].iloc[0])
-
-    # Update session_state players immediately for roster and draft board
-    st.session_state.players = players.copy()
+    idx = draft_board["Name"] == chosen_player
+    draft_board.loc[idx, "FantasyTeam"] = selected_team
+    db_utils.update_draft_pick(chosen_player, selected_team)  # implement in db_utils
     st.success(f"{selected_team} drafted {chosen_player}!")
-    st.session_state.draft_triggered = False
+    # Refresh draft board
+    draft_board = load_draft_board()
 
-# --- My Roster with Bench ---
-st.subheader("My Roster")
-my_team_players = players[players["held_by"] == selected_team]
-
-roster_rows = []
-for pos, slots in roster_template.items():
-    for _ in range(slots):
-        roster_rows.append({"Pos.": pos, "Name": "---", "team": "---", "Yr.": "---", "Ht.": "---", "Wt.": "---"})
-for _ in range(num_bench):
-    roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---", "Yr.": "---", "Ht.": "---", "Wt.": "---"})
-
-my_roster = pd.DataFrame(roster_rows)
-pos_counts = {pos: 0 for pos in roster_template.keys()}
-
-for _, row in my_team_players.iterrows():
-    pos = row["Pos."]
-    if pos in roster_template and pos_counts[pos] < roster_template[pos]:
-        index = sum([roster_template[p] for p in roster_template
-                     if list(roster_template.keys()).index(p) < list(roster_template.keys()).index(pos)]) + pos_counts[pos]
-        my_roster.loc[index, ["Name", "team", "Yr.", "Ht.", "Wt."]] = row[["Name", "team", "Yr.", "Ht.", "Wt."]]
-        pos_counts[pos] += 1
-    else:
-        for i in range(len(my_roster)):
-            if my_roster.loc[i, "Pos."].startswith("Bench") and my_roster.loc[i, "Name"] == "---":
-                my_roster.loc[i, "Pos."] = f"Bench - {pos}"
-                my_roster.loc[i, ["Name", "team", "Yr.", "Ht.", "Wt."]] = row[["Name", "team", "Yr.", "Ht.", "Wt."]]
-                break
-
-st.table(my_roster)
-
-# --- Draft Board ---
+# --- Draft Board Display ---
 st.subheader("Draft Board")
-draft_board = players[players["held_by"].notna()].copy()
 if not draft_board.empty:
     st.dataframe(
-        draft_board[["Name", "Pos.", "team", "held_by"]],
+        draft_board[["Round", "Pick", "Name", "Pos.", "team", "FantasyTeam"]],
         width='stretch'
     )
 else:
