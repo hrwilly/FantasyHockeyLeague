@@ -29,28 +29,18 @@ draft_board = load_draft_board()
 drafted = draft_board[draft_board["Name"].notna()]
 next_picks = draft_board[draft_board["Name"].isna()].head(5)
 
-st.subheader("Upcoming Draft Order")
-if next_picks.empty:
-    st.info("All upcoming picks have been drafted!")
-else:
-    cols = st.columns(len(next_picks))
-    for col, (_, row) in zip(cols, next_picks.iterrows()):
-        col.markdown(
-            f"""
-            <div style="
-                background-color:#4CAF50;
-                color:white;
-                padding:10px;
-                text-align:center;
-                border-radius:5px;
-                font-weight:bold;
-            ">
-                R{row['Round']} P{row['Pick']}
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
+st.subheader("Upcoming Draft Order") 
+cols = st.columns(len(next_picks)) 
+for col, (_, row) in zip(cols, next_picks.iterrows()): 
+    short_name = row["FantasyTeam"][:10] 
+    col.markdown( f""" <div style=" background-color:#4CAF50; 
+                                    color:white; 
+                                    padding:10px; 
+                                    text-align:center; 
+                                    border-radius:5px; 
+                                    font-weight:bold; "> 
+                                    {short_name}<br>R{row['Round']} 
+                                    P{row['Pick']} </div> """, unsafe_allow_html=True )
 # --- Select your team ---
 st.session_state["team_name"] = st.selectbox(
     "Select your team:",
