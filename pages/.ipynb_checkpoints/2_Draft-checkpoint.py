@@ -23,13 +23,12 @@ def load_draft_board():
         df = pd.DataFrame(columns=["Round", "Pick", "Name", "team", "Pos.", "FantasyTeam"])
     return df.sort_values(by=["Round", "Pick"])
 
-if "draft_board" not in st.session_state:
-    st.session_state.draft_board = load_draft_board()
+st.session_state.draft_board = load_draft_board()
 draft_board = st.session_state.draft_board
 
+
 # --- Load players ---
-if "players" not in st.session_state:
-    st.session_state.players = db_utils.load_players()
+st.session_state.players = db_utils.load_players()
 players = st.session_state.players
 
 # --- Determine current pick ---
