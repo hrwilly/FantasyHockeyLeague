@@ -87,7 +87,7 @@ selected_add_display = st.selectbox("Select a player to add:", add_options, inde
 st.session_state.add_player = selected_add_display
 
 # --- Drop Player dropdown ---
-team_players = players[players["drafted_by"] == my_team_name]
+team_players = players[players["held_by"] == my_team_name]
 drop_df = format_options(team_players)
 drop_options = [""] + drop_df["display"].tolist()
 drop_index = drop_options.index(st.session_state.drop_player) if st.session_state.drop_player in drop_options else 0
@@ -108,7 +108,7 @@ if st.button("Add & Drop Player"):
         pos_drop = players.loc[players["Name"] == drop_name, "Pos."].values[0]
 
         # Count current players at that position
-        current_count = len(players[(players["drafted_by"] == my_team_name) & (players["Pos."] == pos_add)])
+        current_count = len(players[(players["held_by"] == my_team_name) & (players["Pos."] == pos_add)])
         if pos_add == pos_drop:
             current_count -= 1
 
