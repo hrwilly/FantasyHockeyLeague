@@ -24,8 +24,8 @@ def load_draft_board():
 draft_board = load_draft_board()
 
 # --- Current pick and upcoming picks ---
-drafted = draft_board[draft_board["FantasyTeam"].notna()]
-next_picks = draft_board[draft_board["FantasyTeam"].isna()].head(5)
+drafted = draft_board[draft_board["Name"].notna()]
+next_picks = draft_board[draft_board["Name"].isna()].head(5)
 
 st.subheader("Upcoming Draft Order")
 cols = st.columns(len(next_picks))
