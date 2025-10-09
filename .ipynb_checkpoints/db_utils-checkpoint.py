@@ -39,7 +39,6 @@ def load_draft_board() -> pd.DataFrame:
     """
     response = supabase.table("DraftBoard").select("*").execute()
     df = pd.DataFrame(response.data)
-    st.dataframe(df)
     return df
 
 # --- Update a draft pick ---
