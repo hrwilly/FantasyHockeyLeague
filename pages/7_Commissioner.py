@@ -87,6 +87,7 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
     points = points.dropna(subset = 'Name')
     points = points.set_index('Name')[['team', 'FantasyPoints']]
 
+    st.dataframe(points[points['FantasyPoints'] == 0])
     db_utils.save_weekly_points(points)
     st.success(f"✅ Weekly scoring saved for {date.today().strftime('%Y-%m-%d')}")
 
