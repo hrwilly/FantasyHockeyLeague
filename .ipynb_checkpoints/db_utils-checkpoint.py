@@ -44,8 +44,10 @@ def load_last_week_stats():
 def save_last_week_stats(df: pd.DataFrame):
     if df.empty:
         return
+
+    df = df.reset_index()
     data = df.to_dict(orient="records")
-    supabase.table("last_week_stats").upsert(data).execute()
+    supabase.table("last_week_stats").upsert(data, on_conflict = ['Name', 'team']).execute()
 
 
 def save_weekly_points(df):
