@@ -53,9 +53,6 @@ def update_draft_pick(player_name: str, fantasy_team: str):
         .execute()
     )
     
-    if response.status_code != 200:
-        raise Exception(f"Failed to update draft pick: {response.json()}")
-    
     return response.data
 
 def save_player(row):
