@@ -42,7 +42,7 @@ if upcoming_picks.empty:
     st.info("All upcoming picks have been drafted!")
 else:
     cols = st.columns(len(upcoming_picks))
-    for col, (_, row) in zip(cols, next_picks.iterrows()): 
+    for col, (_, row) in zip(cols, upcoming_picks.iterrows()): 
         short_name = row["FantasyTeam"][:10] 
         col.markdown( f""" <div style=" background-color:#4CAF50; 
                                         color:white; 
