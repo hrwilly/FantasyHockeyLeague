@@ -58,7 +58,7 @@ if "players" not in st.session_state:
 players = st.session_state.players
 
 available_players = players[players["held_by"].isna()].copy()
-available_players = available_players.sort_values(by="Draft Round", key=lambda col: pd.to_numeric(col, errors="coerce"), na_position="last"
+available_players = available_players.sort_values(by="Draft Round", key=lambda col: pd.to_numeric(col, errors="coerce"), na_position="last")
 
 st.subheader("Available Players")
 if available_players.empty:
