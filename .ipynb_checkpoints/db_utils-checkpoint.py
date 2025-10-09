@@ -59,7 +59,8 @@ def save_weekly_points(df):
 
     # Copy to avoid modifying original
     df = df.copy()
+    
 
     # Convert to list of dicts for Supabase
     records = df.to_dict(orient="records")
-    supabase.table("points").upsert(records).execute()
+    supabase.table("points").upsert(records, on_conflict = ['Name', 'team', 'FantasyPoints']).execute()
