@@ -33,7 +33,7 @@ if "players" not in st.session_state:
 players = st.session_state.players
 
 # --- Determine current pick ---
-next_pick_row = draft_board[draft_board["FantasyTeam"].isna()].head(1)
+next_pick_row = draft_board[draft_board["Name"].isna()].head(1)
 
 # --- Upcoming Draft Order ---
 st.subheader("Upcoming Draft Order")
