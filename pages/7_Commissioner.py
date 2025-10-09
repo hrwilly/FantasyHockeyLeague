@@ -31,7 +31,7 @@ def get_current_data(team):
     points['team'] = team
     points = points.set_index(['Name', 'team'])
 
-    stats_cols = ['G','A','Shots','PIM','GWG','PPG','SHG','+/-','FOW','FOL','BLK','W','GA','SV','SO']
+    stats_cols = ['GP', 'G','A','Shots','PIM','GWG','PPG','SHG','+/-','FOW','FOL','BLK','W','GA','SV','SO']
     points = points[stats_cols].fillna(0)
 
     return points
@@ -39,7 +39,7 @@ def get_current_data(team):
 def compute_fantasy_points(data):
     scored = data.copy()
     multipliers = {
-        'G': 2, 'A': 1, 'Shots': 0.1, 'PIM': -0.5, 'GWG': 1,
+        'GP' : 0, 'G': 2, 'A': 1, 'Shots': 0.1, 'PIM': -0.5, 'GWG': 1,
         'PPG': 0.5, 'SHG': 0.5, '+/-': 0.5, 'FOW': 0.1,
         'FOL': -0.1, 'BLK': 0.5, 'W': 4, 'GA': -2,
         'SV': 0.2, 'SO': 3
@@ -48,7 +48,7 @@ def compute_fantasy_points(data):
         if col in scored.columns:
             scored[col] = scored[col] * mult
 
-    scored['FantasyPoints'] = scored.sum(axis=1)
+    scored['FantasyPoints'] = round(scored.sum(axis=1), 1)
     return scored
 
 # --- Run Weekly Scoring ---
