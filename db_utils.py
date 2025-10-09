@@ -40,7 +40,7 @@ def load_draft_board() -> pd.DataFrame:
     response = supabase.table("DraftBoard").select("*").execute()
     
     data = response.data
-    df = pd.DataFrame(data)
+    df = pd.DataFrame(data).reset_index()
     
     # Ensure correct column types
     df["Round"] = pd.to_numeric(df["Round"], errors="coerce")
