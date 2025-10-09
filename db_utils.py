@@ -38,11 +38,8 @@ def load_draft_board() -> pd.DataFrame:
     Columns: Round, Pick, Name, team, Pos., FantasyTeam
     """
     response = supabase.table("DraftBoard").select("*").execute()
-    
-    data = response.data
 
-    st.dataframe(data)
-    df = pd.DataFrame(data)
+    df = pd.DataFrame(response)
     
     # Ensure correct column types
     df["Round"] = pd.to_numeric(df["Round"], errors="coerce")
