@@ -37,7 +37,7 @@ next_pick_row = draft_board[draft_board["FantasyTeam"].isna()].head(1)
 
 # --- Upcoming Draft Order ---
 st.subheader("Upcoming Draft Order")
-upcoming_picks = draft_board[draft_board["FantasyTeam"].isna()].head(5)
+upcoming_picks = draft_board[draft_board["Name"].isna()].head(5)
 if upcoming_picks.empty:
     st.info("All upcoming picks have been drafted!")
 else:
