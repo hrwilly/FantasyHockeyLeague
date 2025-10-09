@@ -86,6 +86,9 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
     points = points.reset_index()
     points = points[['Name', 'team', 'FantasyPoints']]
 
+    current_cum = st.session_state['current_cum']
+
     db_utils.save_weekly_points(points)
+    db_utils.save_last_week_stats(current_cum)
     st.success(f"✅ Weekly scoring saved for {date.today().strftime('%Y-%m-%d')}")
 
