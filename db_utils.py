@@ -38,13 +38,7 @@ def load_draft_board() -> pd.DataFrame:
     Columns: Round, Pick, Name, team, Pos., FantasyTeam
     """
     response = supabase.table("DraftBoard").select("*").execute()
-
-    df = pd.DataFrame(response)
-    
-    # Ensure correct column types
-    df["Round"] = pd.to_numeric(df["Round"], errors="coerce")
-    df["Pick"] = pd.to_numeric(df["Pick"], errors="coerce")
-    df["FantasyTeam"] = df.get("FantasyTeam")  # could be null
+    df = pd.DataFrame(response.data)
     return df
 
 # --- Update a draft pick ---
