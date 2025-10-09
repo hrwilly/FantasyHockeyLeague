@@ -30,7 +30,7 @@ next_picks = draft_board[draft_board["Name"].isna()].head(5)
 st.subheader("Upcoming Draft Order")
 cols = st.columns(len(next_picks))
 for col, (_, row) in zip(cols, next_picks.iterrows()):
-    short_name = row["team"][:10]
+    short_name = row["FantasyTeam"][:10]
     col.markdown(
         f"""
         <div style="
