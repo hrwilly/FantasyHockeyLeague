@@ -41,19 +41,13 @@ def load_draft_board() -> pd.DataFrame:
     df = pd.DataFrame(response.data)
     return df
 
-# --- Update a draft pick ---
-def update_draft_pick(player_name: str, fantasy_team: str):
-    """
-    Assigns a player to a FantasyTeam in Supabase.
-    """
-    response = (
-        supabase.table("DraftBoard")
-        .update({"FantasyTeam": fantasy_team})
-        .eq("Name", player_name)
-        .execute()
-    )
-    
-    return response.data
+def update_draft_pick_full(round_number, pick_number, name, pos, team, fantasy_team):
+    supabase.table("DraftBoard").update({
+        "Name": name,
+        "Pos.": pos,
+        "team": team,
+        "FantasyTeam": fantasy_team
+    }).eq("Round", round_number).eq("Pick", pick_number).eq("FantasyTeam", fantasy_team).execute()
 
 def save_player(row):
     row_clean = row.where(pd.notna(row), None)
