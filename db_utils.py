@@ -39,9 +39,6 @@ def load_draft_board() -> pd.DataFrame:
     """
     response = supabase.table("DraftBoard").select("*").execute()
     
-    if response.status_code != 200:
-        raise Exception(f"Failed to load draft board: {response.json()}")
-    
     data = response.data
     df = pd.DataFrame(data)
     
