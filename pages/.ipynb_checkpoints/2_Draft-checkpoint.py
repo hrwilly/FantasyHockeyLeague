@@ -116,7 +116,7 @@ if st.button("Draft Player", key="draft_player_button"):
 
 # --- My Roster with Bench ---
 st.subheader("My Roster")
-my_team_players = players[players["drafted_by"] == selected_team]
+my_team_players = players[players["held_by"] == selected_team]
 
 roster_rows = []
 for pos, slots in roster_template.items():
