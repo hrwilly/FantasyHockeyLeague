@@ -79,7 +79,7 @@ if next_pick_row.empty:
     st.info("Draft complete! No picks remaining.")
     can_draft = False
 else:
-    next_team_to_pick = next_pick_row.iloc[0]["team"]
+    next_team_to_pick = next_pick_row.iloc[0]["FantasyTeam"]
     can_draft = (selected_team == next_team_to_pick)
 
 if can_draft:
@@ -128,7 +128,7 @@ if can_draft:
         st.success(f"{selected_team} drafted {chosen_player}!")
 else:
     if not next_pick_row.empty:
-        st.info(f"It is not your turn. Next pick: {next_pick_row.iloc[0]['team']}")
+        st.info(f"It is not your turn. Next pick: {next_pick_row.iloc[0]['FantasyTeam']}")
 
 # --- Roster Display ---
 st.subheader(f"{selected_team} Roster")
