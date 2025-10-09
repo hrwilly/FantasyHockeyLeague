@@ -95,8 +95,9 @@ if st.button("Draft Player", key="draft_player_button"):
 # --- Draft Board Display ---
 st.subheader("Draft Board")
 if not draft_board.empty:
+    draft_board_display = draft_board[draft_board['Name'].notnull()]
     st.dataframe(
-        draft_board[["Round", "Pick", "Name", "Pos.", "team", "FantasyTeam"]],
+        draft_board_display[["Round", "Pick", "Name", "Pos.", "team", "FantasyTeam"]],
         width='stretch'
     )
 else:
