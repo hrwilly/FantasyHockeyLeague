@@ -48,7 +48,7 @@ def save_last_week_stats(df: pd.DataFrame):
     supabase.table("last_week_stats").upsert(data).execute()
 
 
-def save_weekly_points(df, week=None):
+def save_weekly_points(df):
     """
     Saves (upserts) weekly fantasy points to the 'points' table in Supabase.
     Expects DataFrame columns: Name, team, FantasyPoints.
@@ -57,13 +57,8 @@ def save_weekly_points(df, week=None):
         print("[save_weekly_points] No data to save.")
         return None
 
-    # Use today's date as the week if none provided
-    if week is None:
-        week = str(date.today())
-
     # Copy to avoid modifying original
     df = df.copy()
-    df["Week"] = week
 
     # Convert to list of dicts for Supabase
     records = df.to_dict(orient="records")
