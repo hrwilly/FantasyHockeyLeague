@@ -62,7 +62,7 @@ def get_free_agents():
 st.subheader("Available Free Agents")
 free_agents = get_free_agents()
 st.dataframe(free_agents.set_index(['Name', 'team', 'Pos.']),
-             height=300, use_container_width=True, , width = 'stretch')
+             height=300, use_container_width=True, width = 'stretch')
 
 # --- Initialize session state for selections ---
 if "add_player" not in st.session_state:
