@@ -35,7 +35,7 @@ def build_roster(players_df, team_name):
     roster_rows = []
     for pos, slots in roster_template.items():
         for _ in range(slots):
-            roster_rows.append({"Pos.": pos, "Name": "---", "team": "---})
+            roster_rows.append({"Pos.": pos, "Name": "---", "team": "---"})
     for _ in range(num_bench):
         roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---"})
     my_roster = pd.DataFrame(roster_rows)
