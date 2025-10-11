@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
 import db_utils
-import time
+from streamlit_autorefresh import st_autorefresh
 
 st.title("Add / Drop Players")
 
 # --- Auto-refresh every 5 seconds ---
-st.experimental_auto_refresh(interval=5 * 1000, key="adddrop_autorefresh")
+st_autorefresh(interval=5000, key="players_autorefresh")
 
 # --- Load data ---
 teams = db_utils.load_teams()
