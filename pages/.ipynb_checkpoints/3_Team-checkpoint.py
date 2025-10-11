@@ -29,15 +29,15 @@ def build_roster(players_df, team_name):
     roster_template = {"F": 6, "D": 4, "G": 2}  # starting positions
     num_bench = 5
 
-    team_players = players_df[players_df["drafted_by"] == team_name].copy()
+    team_players = players_df[players_df["held_by"] == team_name].copy()
 
     # Create roster placeholders
     roster_rows = []
     for pos, slots in roster_template.items():
         for _ in range(slots):
-            roster_rows.append({"Pos.": pos, "Name": "---", "team": "---", "Ht.": "---", "Wt.": "---"})
+            roster_rows.append({"Pos.": pos, "Name": "---", "team": "---})
     for _ in range(num_bench):
-        roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---", "Ht.": "---", "Wt.": "---"})
+        roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---"})
     my_roster = pd.DataFrame(roster_rows)
 
     # Counters for starters per position
@@ -50,12 +50,12 @@ def build_roster(players_df, team_name):
             # Find the correct starter slot
             start_index = sum([roster_template[p] for p in roster_template
                                if list(roster_template.keys()).index(p) < list(roster_template.keys()).index(pos)])
-            my_roster.loc[start_index + pos_counts[pos], ["Name", "team", "Ht.", "Wt."]] = row[["Name", "team", "Ht.", "Wt."]]
+            my_roster.loc[start_index + pos_counts[pos], ["Name", "team"]] = row[["Name", "team"]]
             pos_counts[pos] += 1
         else:
             # Fill bench sequentially
-            my_roster.loc[bench_index, ["Pos.", "Name", "team", "Ht.", "Wt."]] = [
-                f"Bench - {pos}", row["Name"], row["team"], row["Ht."], row["Wt."]
+            my_roster.loc[bench_index, ["Pos.", "Name", "team"]] = [
+                f"Bench - {pos}", row["Name"], row["team"]
             ]
             bench_index += 1
 
