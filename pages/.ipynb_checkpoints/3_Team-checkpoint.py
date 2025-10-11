@@ -22,8 +22,7 @@ if teams.empty:
     st.stop()
 
 # --- Select your team ---
-if "team_name" not in st.session_state:
-    st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
+st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
 selected_team = st.session_state["team_name"]
 
 def build_roster(players_df, team_name):
