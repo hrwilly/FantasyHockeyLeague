@@ -61,8 +61,8 @@ def get_free_agents():
 
 st.subheader("Available Free Agents")
 free_agents = get_free_agents()
-st.dataframe(free_agents.set_index(['Name', 'team', 'Pos.']),
-             height=300, use_container_width=True, width = 'stretch')
+st.dataframe(free_agents.set_index(['Name', 'team', 'Pos.']).drop(['held_by'], axis = 1),
+             height=500, use_container_width=True, width = 'stretch')
 
 # --- Initialize session state for selections ---
 if "add_player" not in st.session_state:
@@ -129,5 +129,5 @@ if st.button("Add & Drop Player"):
             display_df = build_roster_display(my_team_name)
             st.table(display_df)
             free_agents = get_free_agents()
-            st.dataframe(free_agents.set_index(['Name', 'team', 'Pos.']),
-                         height=300, use_container_width=True, width = 'stretch')
+            st.dataframe(free_agents.set_index(['Name', 'team', 'Pos.']).drop(['held_by'], axis = 1),
+                         height=500, use_container_width=True, width = 'stretch')
