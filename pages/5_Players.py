@@ -61,7 +61,7 @@ def get_free_agents():
 
 st.subheader("Available Free Agents")
 free_agents = get_free_agents()
-st.dataframe(free_agents[["Name", "Pos.", "team", "Ht.", "Wt."]],
+st.dataframe(free_agents.set_index(['Name', 'team', 'Pos.')],
              height=300, use_container_width=True)
 
 # --- Initialize session state for selections ---
