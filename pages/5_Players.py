@@ -6,17 +6,13 @@ import time
 st.title("Add / Drop Players")
 
 # --- Auto-refresh every 5 seconds ---
-refresh_interval = 5
-if "last_refresh_adddrop" not in st.session_state:
-    st.session_state["last_refresh_adddrop"] = time.time()
-
-if time.time() - st.session_state["last_refresh_adddrop"] > refresh_interval:
-    st.session_state["last_refresh_adddrop"] = time.time()
-    st.experimental_rerun()
+st.experimental_auto_refresh(interval=5 * 1000, key="adddrop_autorefresh")
 
 # --- Load data ---
 teams = db_utils.load_teams()
 players = db_utils.load_players()
+points = db_utils.load_points()
+stats = db_utils.load_last_week_stats()
 
 if teams.empty:
     st.warning("No teams registered yet.")
