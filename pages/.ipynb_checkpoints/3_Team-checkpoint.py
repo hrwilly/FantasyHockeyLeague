@@ -17,7 +17,7 @@ if time.time() - st.session_state["last_refresh"] > refresh_interval:
 teams = db_utils.load_teams()
 players = db_utils.load_players()
 points = db_utils.load_points()
-weekly = points[points['Week'] == max(points['Week']][['Name', 'team', 'FantasyPoints']].rename({'FantasyPoints' : 'WeeklyPts'})
+weekly = points[points['Week'] == max(points['Week'])][['Name', 'team', 'FantasyPoints']].rename({'FantasyPoints' : 'WeeklyPts'})
 total = points.pivot(columns = 'Week', index = ['Name', 'team'], values = 'FantasyPoints')
 total['CumulativePts'] = round(total.sum(axis=1), 1)
 total = total.reset_index()[['Name', 'team', 'CumulativePts']]
