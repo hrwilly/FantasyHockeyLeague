@@ -35,9 +35,9 @@ def build_roster(players_df, team_name):
     roster_rows = []
     for pos, slots in roster_template.items():
         for _ in range(slots):
-            roster_rows.append({"Pos.": pos, "Name": "---", "team": "---"})
+            roster_rows.append({"Pos.": pos, "Name": "---", "team": "---", "WeeklyPts" : "---", "CumulativePts": "---"})
     for _ in range(num_bench):
-        roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---"})
+        roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---", "WeeklyPts" : "---", "CumulativePts": "---"})
     my_roster = pd.DataFrame(roster_rows)
 
     # Counters for starters per position
@@ -50,12 +50,12 @@ def build_roster(players_df, team_name):
             # Find the correct starter slot
             start_index = sum([roster_template[p] for p in roster_template
                                if list(roster_template.keys()).index(p) < list(roster_template.keys()).index(pos)])
-            my_roster.loc[start_index + pos_counts[pos], ["Name", "team"]] = row[["Name", "team"]]
+            my_roster.loc[start_index + pos_counts[pos], ["Name", "team", "WeeklyPts", "CumulativePts"]] = row[["Name", "team", "WeeklyPts", "CumulativePts"]]
             pos_counts[pos] += 1
         else:
             # Fill bench sequentially
-            my_roster.loc[bench_index, ["Pos.", "Name", "team"]] = [
-                f"Bench - {pos}", row["Name"], row["team"]
+            my_roster.loc[bench_index, ["Pos.", "Name", "team", "WeeklyPts", "CumulativePts"]] = [
+                f"Bench - {pos}", row["Name"], row["team"], row["WeeklyPts"], row["CumulativePts"]
             ]
             bench_index += 1
 
