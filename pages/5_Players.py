@@ -13,6 +13,7 @@ teams = db_utils.load_teams()
 players = db_utils.load_players()
 points = db_utils.load_points()
 stats = db_utils.load_last_week_stats()
+players = pd.merge(players, stats, on = ['Name', 'team'], how = 'left')
 
 if teams.empty:
     st.warning("No teams registered yet.")
