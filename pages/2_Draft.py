@@ -56,7 +56,7 @@ else:
 # --- Select your team ---
 st.session_state["team_name"] = st.selectbox(
     "Select your team:",
-    ['Mac', 'Alex', 'Matt', 'Jordan', 'Meth Rhett', 'Kieran', 'HYHusky', 'Graham', 'Nathan', 'Jamie', 'LaSoiréeDuHockeyMolson', 'Sam']
+    ['Mac', 'Alex', 'Matt', 'Jordan', 'Meth Rhett', 'Kieran', 'HYHusky', 'Graham', 'Nathan', 'Puck Stops Here', 'LaSoiréeDuHockeyMolson', 'Sam']
 )
 selected_team = st.session_state["team_name"]
 
