@@ -86,3 +86,9 @@ def save_weekly_points(df):
     # Convert to list of dicts for Supabase
     records = df.to_dict(orient="records")
     supabase.table("points").upsert(records).execute()
+
+def load_points():
+    res = supabase.table("points").select("*").execute()
+    if res.data:
+        return pd.DataFrame(res.data)
+    return pd.DataFrame()
