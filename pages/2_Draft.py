@@ -31,6 +31,8 @@ draft_board = st.session_state.draft_board
 st.session_state.players = db_utils.load_players()
 players = st.session_state.players
 stats = db_utils.load_last_week_stats()
+st.dataframe(players)
+st.dataframe(stats)
 players = pd.merge(players, stats, on = ['Name', 'team'], how = 'Left')
 
 # --- Determine current pick ---
