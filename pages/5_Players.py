@@ -14,6 +14,8 @@ players = db_utils.load_players()
 points = db_utils.load_points()
 stats = db_utils.load_last_week_stats()
 players = pd.merge(players, stats, on = ['Name', 'team'], how = 'left')
+total = points.pivot_table(columns = 'Week', index = ['Name', 'team'], values = 'FantasyPoints', aggfunc = 'mean')
+players = pd.merge(players, total.reset_index(), on = ['Name', 'team'], how = 'left')
 
 if teams.empty:
     st.warning("No teams registered yet.")
