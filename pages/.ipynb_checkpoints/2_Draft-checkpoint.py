@@ -164,7 +164,7 @@ def build_team_roster(players, team_name):
     return my_roster
 
 team_roster = build_team_roster(players, selected_team)
-st.table(team_roster, width='stretch')
+st.table(team_roster)
 
 
 # --- Draft Board Display ---
