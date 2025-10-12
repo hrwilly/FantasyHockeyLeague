@@ -74,7 +74,7 @@ if available_players.empty:
     st.warning("No available players left!")
 else:
     # --- Pagination setup ---
-    page_size = 25  # number of rows per page
+    page_size = 100  # number of rows per page
     total_rows = len(available_players)
     total_pages = (total_rows - 1) // page_size + 1
 
