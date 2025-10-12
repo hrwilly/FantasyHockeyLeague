@@ -42,7 +42,7 @@ def load_players():
         start += batch_size
         end += batch_size
 
-    return pd.Dataframe(all_rows)
+    return pd.DataFrame(all_rows)
 
 # --- Load the full draft board ---
 def load_draft_board() -> pd.DataFrame:
