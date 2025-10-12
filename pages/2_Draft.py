@@ -6,7 +6,7 @@ from streamlit_autorefresh import st_autorefresh
 st.title("🏒 Fantasy Draft Room")
 
 # --- Auto-refresh every 5 seconds ---
-st_autorefresh(interval=5000, key="draft_autorefresh")
+st_autorefresh(interval=10000, key="draft_autorefresh")
 
 # --- Load teams ---
 if "teams" not in st.session_state:
