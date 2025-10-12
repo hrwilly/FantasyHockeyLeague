@@ -41,10 +41,8 @@ def load_players(batch_size=100, max_retries=3, delay=2):
                     rows = response.data
                     break  # Success: exit retry loop
                 except ReadError as e:
-                    logging.warning(f"ReadError on attempt {attempt+1}: {e}")
                     time.sleep(delay)
             else:
-                logging.error(f"Max retries exceeded for range {start}-{end}")
                 break  # Break outer loop if all retries failed
 
             if not rows:
@@ -55,7 +53,6 @@ def load_players(batch_size=100, max_retries=3, delay=2):
             end += batch_size
 
         except Exception as e:
-            logging.error(f"Unexpected error while loading players: {e}")
             break
 
     return pd.DataFrame(all_rows)
