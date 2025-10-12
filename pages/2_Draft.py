@@ -44,7 +44,7 @@ if upcoming_picks.empty:
 else:
     cols = st.columns(len(upcoming_picks))
     for col, (_, row) in zip(cols, upcoming_picks.iterrows()): 
-        short_name = row["FantasyTeam"][:10] 
+        short_name = row["FantasyTeam"] 
         col.markdown( f""" <div style=" background-color:#4CAF50; 
                                         color:white; 
                                         padding:10px; 
