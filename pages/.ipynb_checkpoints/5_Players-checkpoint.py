@@ -6,7 +6,7 @@ from streamlit_autorefresh import st_autorefresh
 st.title("Add / Drop Players")
 
 # --- Auto-refresh every 5 seconds ---
-st_autorefresh(interval=5000, key="players_autorefresh")
+st_autorefresh(interval=10000, key="players_autorefresh")
 
 # --- Load data ---
 teams = db_utils.load_teams()
