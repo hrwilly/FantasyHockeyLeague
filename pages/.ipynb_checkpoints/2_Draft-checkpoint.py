@@ -125,7 +125,7 @@ if can_draft:
             team=player_info["team"],
             fantasy_team=selected_team
         )
-        db_utils.save_player(players.loc[idx_players].iloc[0])
+        db_utils.save_player(players[['Name', 'team', 'Yr.', 'Pos.', 'Ht.', 'Wt.', 'YOB', 'Hometown', 'Last Team', 'Draft Year', 'Draft Team', 'Draft Round', 'held_by']].loc[idx_players].iloc[0])
 
         st.success(f"{selected_team} drafted {chosen_player}!")
 else:
