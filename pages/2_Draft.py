@@ -68,7 +68,7 @@ st.subheader("Available Players")
 if available_players.empty:
     st.warning("No available players left!")
 else:
-    st.dataframe(available_players.drop('held_by', axis=1).set_index(['Name', 'Pos.', 'team']), width='stretch')
+    st.dataframe(available_players.drop('held_by', axis=1).set_index(['Name', 'Pos.', 'team']).sort_values('Draft Round'), width='stretch')
 
 # --- Draft Controls ---
 st.subheader("Draft Controls")
