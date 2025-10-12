@@ -28,8 +28,21 @@ def load_teams():
     return pd.DataFrame(res.data)
 
 def load_players():
-    res = supabase.table("players").select("*").limit(5000).execute()
-    return pd.DataFrame(res.data)
+    batch_size = 100
+    start = 0
+    end = batch_size - 1
+    all_rows = []
+    
+    while True:
+        response = supabase.table("players").select("*").range(start, end).execute()
+        rows = response.data
+        if not rows:
+            break
+        all_rows.extend(rows)
+        start += batch_size
+        end += batch_size
+
+    return pd.Dataframe(all_rows)
 
 # --- Load the full draft board ---
 def load_draft_board() -> pd.DataFrame:
