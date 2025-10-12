@@ -4,6 +4,7 @@ import streamlit as st
 import pandas as pd
 import time
 from datetime import date
+from httpx import ReadError
 
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
@@ -27,20 +28,35 @@ def load_teams():
     res = supabase.table("teams").select("*").execute()
     return pd.DataFrame(res.data)
 
-def load_players():
-    batch_size = 100
+def load_players(batch_size=100, max_retries=3, delay=2):
     start = 0
     end = batch_size - 1
     all_rows = []
-    
+
     while True:
-        response = supabase.table("players").select("*").range(start, end).execute()
-        rows = response.data
-        if not rows:
+        try:
+            for attempt in range(max_retries):
+                try:
+                    response = supabase.table("players").select("*").range(start, end).execute()
+                    rows = response.data
+                    break  # Success: exit retry loop
+                except ReadError as e:
+                    logging.warning(f"ReadError on attempt {attempt+1}: {e}")
+                    time.sleep(delay)
+            else:
+                logging.error(f"Max retries exceeded for range {start}-{end}")
+                break  # Break outer loop if all retries failed
+
+            if not rows:
+                break  # No more data
+
+            all_rows.extend(rows)
+            start += batch_size
+            end += batch_size
+
+        except Exception as e:
+            logging.error(f"Unexpected error while loading players: {e}")
             break
-        all_rows.extend(rows)
-        start += batch_size
-        end += batch_size
 
     return pd.DataFrame(all_rows)
 
