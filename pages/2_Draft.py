@@ -62,53 +62,13 @@ selected_team = st.session_state["team_name"]
 
 # --- Available players ---
 available_players = players[players["held_by"].isna()].copy()
-available_players = available_players.sort_values(
-    by="Draft Round",
-    key=lambda col: pd.to_numeric(col, errors="coerce"),
-    na_position="last"
-)
+available_players = available_players.sort_values(by="Draft Round", key=lambda col: pd.to_numeric(col, errors="coerce"), na_position="last")
 
 st.subheader("Available Players")
-
 if available_players.empty:
     st.warning("No available players left!")
 else:
-    # --- Pagination setup ---
-    page_size = 100  # number of rows per page
-    total_rows = len(available_players)
-    total_pages = (total_rows - 1) // page_size + 1
-
-    # Keep current page in session state
-    if "players_page" not in st.session_state:
-        st.session_state.players_page = 1
-
-    # Navigation buttons
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col1:
-        if st.button("⬅️ Previous", disabled=st.session_state.players_page <= 1):
-            st.session_state.players_page -= 1
-    with col3:
-        if st.button("Next ➡️", disabled=st.session_state.players_page >= total_pages):
-            st.session_state.players_page += 1
-
-    # Display current page info
-    with col2:
-        st.markdown(
-            f"<p style='text-align:center;'>Page {st.session_state.players_page} of {total_pages}</p>",
-            unsafe_allow_html=True
-        )
-
-    # Slice the dataframe for the current page
-    start_idx = (st.session_state.players_page - 1) * page_size
-    end_idx = start_idx + page_size
-    available_page = available_players.iloc[start_idx:end_idx]
-
-    # Show paginated dataframe
-    st.dataframe(
-        available_page.drop('held_by', axis=1).set_index(['Name', 'Pos.', 'team']),
-        width='stretch',
-        height=600
-    )
+    st.dataframe(available_players.drop('held_by', axis=1).set_index(['Name', 'Pos.', 'team']), width='stretch')
 
 # --- Draft Controls ---
 st.subheader("Draft Controls")
