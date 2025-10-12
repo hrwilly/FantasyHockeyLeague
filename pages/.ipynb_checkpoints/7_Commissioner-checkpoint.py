@@ -39,7 +39,7 @@ def get_current_data(team):
 def compute_fantasy_points(data):
     scored = data.copy()
     multipliers = {
-        'GP' : 0, 'G': 2, 'A': 1, 'Shots': 0.1, 'PIM': -0.5, 'GWG': 1,
+        'GP' : 0, 'G': 4, 'A': 2, 'Shots': 0.1, 'PIM': -0.5, 'GWG': 1,
         'PPG': 0.5, 'SHG': 0.5, '+/-': 0.5, 'FOW': 0.1,
         'FOL': -0.1, 'BLK': 0.5, 'W': 4, 'GA': -2,
         'SV': 0.2, 'SO': 3
