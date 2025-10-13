@@ -52,6 +52,7 @@ def build_roster(players_df, team_name):
     bench_index = sum(roster_template.values())  # first bench slot
 
     for _, row in team_players.iterrows():
+        st.markdown(row)
         pos = row["Pos."]
         if pos in roster_template and pos_counts[pos] <= roster_template[pos]:
             # Find the correct starter slot
