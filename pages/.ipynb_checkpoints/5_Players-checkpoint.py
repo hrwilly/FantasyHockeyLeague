@@ -6,7 +6,7 @@ from streamlit_autorefresh import st_autorefresh
 st.title("Add / Drop Players")
 
 # --- Auto-refresh every 5 seconds ---
-st_autorefresh(interval=10000, key="players_autorefresh")
+st_autorefresh(interval=50000, key="players_autorefresh")
 
 # --- Load data ---
 teams = db_utils.load_teams()
@@ -49,7 +49,7 @@ def build_roster_display(team_name):
 
     display_df = pd.DataFrame(roster_display)
     if not display_df.empty:
-        display_df = display_df[["Pos.", "Name", "team", "Ht.", "Wt."]]
+        display_df = display_df
     return display_df
 
 # --- Display current roster ---
