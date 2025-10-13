@@ -50,7 +50,7 @@ def build_roster_display(team_name):
     display_df = pd.DataFrame(roster_display)
     if not display_df.empty:
         display_df = display_df
-    return display_df
+    return display_df.set_index(['Name', 'team', 'Pos.']).drop(['held_by'], axis = 1)
 
 # --- Display current roster ---
 st.subheader(f"{my_team_name}'s Current Roster")
