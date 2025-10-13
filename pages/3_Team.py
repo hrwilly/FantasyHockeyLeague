@@ -24,6 +24,8 @@ total = total.reset_index()[['Name', 'team', 'CumulativePts']]
 players = pd.merge(players, weekly, on = ['Name', 'team'], how = 'left')
 players = pd.merge(players, total, on = 'Name', how = 'left')
 
+st.dataframe(players)
+
 if teams.empty:
     st.warning("No teams registered yet.")
     st.stop()
