@@ -20,6 +20,7 @@ players = db_utils.load_players()
 points = db_utils.load_points()
 weekly = points[points['Week'] == max(points['Week'])]#[['Name', 'team', 'FantasyPoints']]
 st.markdown(max(points['Week']))
+st.markdown(points['Week'])
 st.dataframe(weekly)
 total = points.pivot_table(columns = 'Week', index = ['Name', 'team'], values = 'FantasyPoints', aggfunc = 'mean')
 total['CumulativePts'] = round(total.sum(axis=1), 1)
