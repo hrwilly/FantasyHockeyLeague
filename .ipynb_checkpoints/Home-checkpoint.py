@@ -10,13 +10,13 @@ st.subheader("Scoring Breakdown:")
 
 # List of stats and their points
 scoring = [
-    ("Goals", "4 pts each"),
-    ("Assists", "2 pt each"),
+    ("Goals", "2 pts each"),
+    ("Assists", "1 pt each"),
     ("Shots", "0.1 pts each"),
-    ("Penalty minutes", "-0.5 pts each"),
+    ("Penalty minutes", "-0.3 pts each"),
     ("Game Winning Goals", "1 pt each"),
     ("Power Play Goals", "0.5 pts each"),
-    ("Short Handed Goals", "0.5 pts each"),
+    ("Short Handed Goals", "1 pts each"),
     ("+/-", "0.5 pts each"),
     ("Faceoffs Won", "0.1 pts each"),
     ("Faceoffs Lost", "-0.1 pts each"),
