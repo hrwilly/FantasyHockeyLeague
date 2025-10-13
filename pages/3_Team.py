@@ -18,10 +18,7 @@ if time.time() - st.session_state["last_refresh"] > refresh_interval:
 teams = db_utils.load_teams()
 players = db_utils.load_players()
 points = db_utils.load_points()
-weekly = points[points['Week'] == max(points['Week'])]#[['Name', 'team', 'FantasyPoints']]
-st.markdown(max(points['Week']))
-st.markdown(points['Week'].unique())
-st.dataframe(weekly)
+weekly = points[points['Week'] == max(points['Week'])][['Name', 'team', 'FantasyPoints']]
 total = points.pivot_table(columns = 'Week', index = ['Name', 'team'], values = 'FantasyPoints', aggfunc = 'mean')
 total['CumulativePts'] = round(total.sum(axis=1), 1)
 total = total.reset_index()[['Name', 'team', 'CumulativePts']]
