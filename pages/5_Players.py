@@ -50,12 +50,13 @@ def build_roster_display(team_name):
     display_df = pd.DataFrame(roster_display)
     if not display_df.empty:
         display_df = display_df
-    return display_df.set_index(['Name', 'team', 'Pos.']).drop(['held_by'], axis = 1)
+    return display_df
 
 # --- Display current roster ---
 st.subheader(f"{my_team_name}'s Current Roster")
 display_df = build_roster_display(my_team_name)
-st.table(display_df)
+st.dataframe(display_df.set_index(['Name', 'team', 'Pos.']).drop(['held_by'], axis = 1),
+             height=500, use_container_width=True, width = 'stretch')
 
 # --- Free agents ---
 def get_free_agents():
