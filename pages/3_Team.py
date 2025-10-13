@@ -17,7 +17,7 @@ if time.time() - st.session_state["last_refresh"] > refresh_interval:
 teams = db_utils.load_teams()
 players = db_utils.load_players()
 points = db_utils.load_points()
-weekly = points[points['Week'] == max(points['Week'])][['Name', 'team', 'FantasyPoints']].rename({'WeeklyPoints' : 'FantasyPts'})
+weekly = points[points['Week'] == max(points['Week'])][['Name', 'team', 'FantasyPoints']].rename({'WeeklyPoints' : 'FantasyPoints'})
 total = points.pivot_table(columns = 'Week', index = ['Name', 'team'], values = 'FantasyPoints', aggfunc = 'mean')
 total['CumulativePts'] = round(total.sum(axis=1), 1)
 total = total.reset_index()[['Name', 'team', 'CumulativePts']]
@@ -52,7 +52,6 @@ def build_roster(players_df, team_name):
     bench_index = sum(roster_template.values())  # first bench slot
 
     for _, row in team_players.iterrows():
-        st.markdown(row)
         pos = row["Pos."]
         if pos in roster_template and pos_counts[pos] <= roster_template[pos]:
             # Find the correct starter slot
