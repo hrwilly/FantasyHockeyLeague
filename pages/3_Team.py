@@ -22,7 +22,7 @@ total = points.pivot_table(columns = 'Week', index = ['Name', 'team'], values = 
 total['CumulativePts'] = round(total.sum(axis=1), 1)
 total = total.reset_index()[['Name', 'team', 'CumulativePts']]
 players = pd.merge(players, weekly, on = ['Name', 'team'], how = 'left')
-players = pd.merge(players, total, on = ['Name', 'team'], how = 'left').rename({'WeeklyPts' : 'FantasyPoints'}, axis = 1)
+players = pd.merge(players, total, on = ['Name', 'team'], how = 'left').rename({'FantasyPoints' : 'WeeklyPts'}, axis = 1)
 
 if teams.empty:
     st.warning("No teams registered yet.")
