@@ -79,11 +79,35 @@ def save_player(row):
     row_clean = row.where(pd.notna(row), None)
     supabase.table("players").upsert(row_clean.to_dict()).execute()
 
-def load_last_week_stats():
-    res = supabase.table("last_week_stats").select("*").execute()
-    if res.data:
-        return pd.DataFrame(res.data)
-    return pd.DataFrame()
+def load_last_week_stats(batch_size=100, max_retries=3, delay=2):
+    start = 0
+    end = batch_size - 1
+    all_rows = []
+
+    while True:
+        try:
+            for attempt in range(max_retries):
+                try:
+                    response = supabase.table("last_week_stats").select("*").range(start, end).execute()
+                    rows = response.data
+                    break  # Success: exit retry loop
+                except ReadError as e:
+                    time.sleep(delay)
+            else:
+                break  # Break outer loop if all retries failed
+
+            if not rows:
+                break  # No more data
+
+            all_rows.extend(rows)
+            start += batch_size
+            end += batch_size
+
+        except Exception as e:
+            break
+
+    return pd.DataFrame(all_rows)
+
 
 def save_last_week_stats(df: pd.DataFrame):
     if df.empty:
