@@ -5,7 +5,7 @@ import time
 import numpy as np
 
 st.title("My Team")
-'''
+
 # --- Auto-refresh every 5 seconds ---
 refresh_interval = 5
 if "last_refresh" not in st.session_state:
@@ -122,4 +122,4 @@ if st.button("Swap Players") and st.session_state.swap1 and st.session_state.swa
 
     # Rebuild roster immediately
     my_roster = build_roster(players, selected_team)
-    st.table(my_roster)'''
+    st.table(my_roster)
