@@ -183,8 +183,8 @@ if st.button("Swap Players") and st.session_state.swap1 and st.session_state.swa
 
     # Fix the Pos. labels to reflect new starter/bench roles
     base_pos = pos1 if not pos1.startswith("Bench") else pos2.split("Bench - ")[-1]
-    my_roster.loc[idx1, "Pos."] = f"Bench - {base_pos}"
-    my_roster.loc[idx2, "Pos."] = base_pos
+    my_roster.loc[idx1, "Pos."] = base_pos
+    my_roster.loc[idx2, "Pos."] = f"Bench - {base_pos}"
 
     # Save and refresh
     st.session_state.my_roster = my_roster
