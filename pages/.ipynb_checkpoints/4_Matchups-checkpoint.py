@@ -56,8 +56,6 @@ with col1:
 st.divider()
 
 # --- Show active rosters ---
-st.markdown("## 🏒 Active Rosters")
-
 # Filter to each team’s roster
 #team1_roster = rosters_df.query("team_name == @selected_matchup['home_team']")
 #team2_roster = rosters_df.query("team_name == @selected_matchup['away_team']")
@@ -75,6 +73,7 @@ with col1:
     st.markdown(f"### {selected_matchup['home_team']} Lineup")
     st.subheader("Starters")
     #st.dataframe(team1_starters[["player_name", "player_pos"]], hide_index=True)
+    st.divider()
     st.subheader("Bench")
     #st.dataframe(team1_bench[["player_name", "player_pos"]], hide_index=True)
 
@@ -82,5 +81,6 @@ with col2:
     st.markdown(f"### {selected_matchup['away_team']} Lineup")
     st.subheader("Starters")
     #st.dataframe(team2_starters[["player_name", "player_pos"]], hide_index=True)
+    st.divider()
     st.subheader("Bench")
     #st.dataframe(team2_bench[["player_name", "player_pos"]], hide_index=True)
