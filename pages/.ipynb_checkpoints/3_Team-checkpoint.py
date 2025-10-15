@@ -191,6 +191,13 @@ if st.button("Swap Players") and st.session_state.swap1 and st.session_state.swa
     st.session_state.swap2 = ""
 
     # Rebuild roster immediately
-    st.session_state.roster = build_roster(players, selected_team)
+    my_roster = build_roster(players, selected_team)
+    st.session_state.roster = my_roster
     roster_placeholder.table(st.session_state.roster)  # updates in-place
     #st.table(my_roster)
+
+    starters = my_roster[~my_roster["Pos."].str.startswith("Bench") & (my_roster["Name"] != "---")]
+    bench = my_roster[my_roster["Pos."].str.startswith("Bench") & (my_roster["Name"] != "---")]
+    
+    st.session_state['starters'] = starters
+    st.session_state['bench'] = bench
