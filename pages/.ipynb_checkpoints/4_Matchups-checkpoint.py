@@ -10,6 +10,7 @@ rosters_df = db_utils.load_roster()
 points = db_utils.load_points()
 
 st.dataframe(points.head(10))
+st.dataframe(rosters_df.head(10))
 
 matchups_df = (
         matchups_df
