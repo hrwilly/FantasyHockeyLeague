@@ -96,7 +96,6 @@ if "my_roster" not in st.session_state or st.session_state.get("team_name") != s
 roster_placeholder = st.empty()
 roster_placeholder.table(st.session_state.my_roster)
 my_roster = st.session_state.my_roster
-st.table(my_roster)
 
 # --- Build starter & bench lists from displayed roster ---
 starters = my_roster[~my_roster["Pos."].str.startswith("Bench") & (my_roster["Name"] != "---")]
@@ -166,23 +165,32 @@ st.session_state.swap2 = st.selectbox("Select Bench player to swap in", swap2_op
 
 # --- Swap action ---
 if st.button("Swap Players") and st.session_state.swap1 and st.session_state.swap2:
-    # Get copies from session state roster
     my_roster = st.session_state.my_roster.copy()
 
-    # Find positions
-    idx1 = my_roster.index[my_roster["Name"] == st.session_state.swap1][0]
-    idx2 = my_roster.index[my_roster["Name"] == st.session_state.swap2][0]
+    # Find indices
+    idx1 = my_roster.index[my_roster["Name"] == st.session_state.swap1][0]  # starter
+    idx2 = my_roster.index[my_roster["Name"] == st.session_state.swap2][0]  # bench
 
-    # Swap entire rows
-    my_roster.loc[[idx1, idx2]] = my_roster.loc[[idx2, idx1]].values
+    # Get the positions
+    pos1 = my_roster.loc[idx1, "Pos."]
+    pos2 = my_roster.loc[idx2, "Pos."]
 
-    # Save updated roster in session state
+    # Swap only player-related fields
+    cols_to_swap = ["Name", "team", "WeeklyPts", "CumulativePts"]
+    temp = my_roster.loc[idx1, cols_to_swap].copy()
+    my_roster.loc[idx1, cols_to_swap] = my_roster.loc[idx2, cols_to_swap].values
+    my_roster.loc[idx2, cols_to_swap] = temp.values
+
+    # Fix the Pos. labels to reflect new starter/bench roles
+    base_pos = pos1 if not pos1.startswith("Bench") else pos2.split("Bench - ")[-1]
+    my_roster.loc[idx1, "Pos."] = f"Bench - {base_pos}"
+    my_roster.loc[idx2, "Pos."] = base_pos
+
+    # Save and refresh
     st.session_state.my_roster = my_roster
+    roster_placeholder.table(my_roster)
 
-    # Update displayed table at top
-    roster_placeholder.table(st.session_state.my_roster)
-
-    st.success(f"Swapped {st.session_state.swap1} and {st.session_state.swap2}")
+    st.success(f"Swapped {st.session_state.swap1} (to bench) and {st.session_state.swap2} (to starter)")
 
     # Reset selections
     st.session_state.swap1 = ""
