@@ -9,8 +9,6 @@ managers = db_utils.load_teams()
 rosters_df = db_utils.load_roster()
 points = db_utils.load_points()
 
-st.dataframe(points.head(10))
-st.dataframe(rosters_df.head(10))
 
 matchups_df = (
         matchups_df
@@ -80,15 +78,15 @@ col1, col2 = st.columns(2)
 with col1:
     st.markdown(f"### Lineup")
     st.caption("Starters")
-    st.dataframe(team1_starters[["player_name", "Pos.", 'team']], hide_index=True)
+    st.dataframe(team1_starters[["player_name", "Pos.", 'team', 'points']], hide_index=True)
     st.divider()
     st.caption("Bench")
-    st.dataframe(team1_bench[["player_name", "Pos.", 'team']], hide_index=True)
+    st.dataframe(team1_bench[["player_name", "Pos.", 'team', 'points']], hide_index=True)
 
 with col2:
     st.markdown(f"### Lineup")
     st.caption("Starters")
-    st.dataframe(team2_starters[["player_name", "Pos.", 'team']], hide_index=True)
+    st.dataframe(team2_starters[["player_name", "Pos.", 'team', 'points']], hide_index=True)
     st.divider()
     st.caption("Bench")
-    st.dataframe(team2_bench[["player_name", "Pos.", 'team']], hide_index=True)
+    st.dataframe(team2_bench[["player_name", "Pos.", 'team', 'points']], hide_index=True)
