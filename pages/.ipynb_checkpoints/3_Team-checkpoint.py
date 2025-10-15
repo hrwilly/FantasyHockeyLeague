@@ -86,14 +86,17 @@ if st.button("Submit Players"):
     # Step 1: Delete existing entries for this team/week (avoid duplicates)
     db_utils.delete_prev_roster(selected_team, selected_week)
 
+    active_roster = list(starters['Name'])
+    deactive_roster = list(bench['Name'])
+
     # Step 2: Prepare new rows
     starter_rows = [
         {"team_name": selected_team, "player_name": p, "player_pos": "starter", "week": selected_week}
-        for p in starters
+        for p in active_roster
     ]
     bench_rows = [
         {"team_name": selected_team, "player_name": p, "player_pos": "bench", "week": selected_week}
-        for p in bench
+        for p in deactive_roster
     ]
     all_rows = starter_rows + bench_rows
 
