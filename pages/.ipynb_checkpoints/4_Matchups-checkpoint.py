@@ -37,6 +37,50 @@ selected_matchup = week_matchups[
         week_matchups["matchup_label"] == selected_matchup_label
 ].iloc[0]
 
-st.write(f"### {selected_matchup['home_team']} vs {selected_matchup['away_team']}")
-st.write(f"##### {selected_matchup['manager_1']} vs {selected_matchup['manager_2']}")
-st.write(f"**Scores:** {selected_matchup['home_team_points']} - {selected_matchup['away_team_points']}")
+
+
+# --- Display matchup info ---
+st.markdown("## 🏆 Selected Matchup")
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown(f"### {selected_matchup['home_team']}")
+    st.caption(f"Manager: {selected_matchup['manager_1']}")
+    st.metric(label="Score", value=selected_matchup['home_team_points'] or 0)
+
+    with col2:
+        st.markdown(f"### {selected_matchup['away_team']}")
+        st.caption(f"Manager: {selected_matchup['manager_2']}")
+        st.metric(label="Score", value=selected_matchup['away_team_points'] or 0)
+
+st.divider()
+
+# --- Show active rosters ---
+st.markdown("## 🏒 Active Rosters")
+
+# Filter to each team’s roster
+#team1_roster = rosters_df.query("team_name == @selected_matchup['home_team']")
+#team2_roster = rosters_df.query("team_name == @selected_matchup['away_team']")
+
+# Separate starters and bench
+#team1_starters = team1_roster[team1_roster["player_pos"] == "starter"]
+#team1_bench = team1_roster[team1_roster["player_pos"] == "bench"]
+
+#team2_starters = team2_roster[team2_roster["player_pos"] == "starter"]
+#team2_bench = team2_roster[team2_roster["player_pos"] == "bench"]
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown(f"### {selected_matchup['home_team']} Lineup")
+    st.subheader("Starters")
+    #st.dataframe(team1_starters[["player_name", "player_pos"]], hide_index=True)
+    st.subheader("Bench")
+    #st.dataframe(team1_bench[["player_name", "player_pos"]], hide_index=True)
+
+with col2:
+    st.markdown(f"### {selected_matchup['away_team']} Lineup")
+    st.subheader("Starters")
+    #st.dataframe(team2_starters[["player_name", "player_pos"]], hide_index=True)
+    st.subheader("Bench")
+    #st.dataframe(team2_bench[["player_name", "player_pos"]], hide_index=True)
