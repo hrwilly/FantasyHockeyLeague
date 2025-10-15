@@ -85,13 +85,20 @@ def build_roster(players_df, team_name):
 
     return my_roster
 
-
+# --- Display roster ---
+st.subheader(f"{selected_team}'s Roster")
+roster_placeholder = st.empty()
+roster_placeholder.table(st.session_state["my_roster"])
+my_roster = st.session_state["my_roster"]
 
 # --- Display roster ---
 st.subheader(f"{selected_team}'s Roster")
 # --- Build or load roster into session state ---
-if "my_roster" not in st.session_state or st.session_state.get("team_name") != selected_team:
-    st.session_state.my_roster = build_roster(players, selected_team)
+if "team_name" not in st.session_state or st.session_state["team_name"] != selected_team:
+    # Team changed → rebuild roster
+    st.session_state["team_name"] = selected_team
+    st.session_state["my_roster"] = build_roster(players, selected_team)
+
 
 roster_placeholder = st.empty()
 roster_placeholder.table(st.session_state.my_roster)
