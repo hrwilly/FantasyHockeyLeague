@@ -38,5 +38,5 @@ selected_matchup = week_matchups[
 ].iloc[0]
 
 st.write(f"### {selected_matchup['home_team']} vs {selected_matchup['away_team']}")
-st.write(f"# {selected_matchup['manager_1']} vs {selected_matchup['manager_2']}")
+st.write(f"##### {selected_matchup['manager_1']} vs {selected_matchup['manager_2']}")
 st.write(f"**Scores:** {selected_matchup['home_team_points']} - {selected_matchup['away_team_points']}")
