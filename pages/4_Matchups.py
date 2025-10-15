@@ -10,7 +10,7 @@ managers = db_utils.load_teams()
 matchups_df = (
         matchups_df
         .merge(managers.rename(columns={"team_name": "home_team", "manager": "manager_1"}), on="home_team")
-        .merge(teams_df.rename(columns={"team_name": "away_team", "manager": "manager_2"}), on="away_team")
+        .merge(managers.rename(columns={"team_name": "away_team", "manager": "manager_2"}), on="away_team")
     )
 
 
