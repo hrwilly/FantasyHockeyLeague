@@ -98,6 +98,9 @@ roster_placeholder.table(st.session_state.roster)
 starters = my_roster[~my_roster["Pos."].str.startswith("Bench") & (my_roster["Name"] != "---")]
 bench = my_roster[my_roster["Pos."].str.startswith("Bench") & (my_roster["Name"] != "---")]
 
+st.session_state['starters'] = starters
+st.session_state['bench'] = bench
+
 weeks = list(range(1, 12))  # or pull from your schedule dynamically
 selected_week = st.selectbox("Select Week", weeks)
 
@@ -105,8 +108,8 @@ if st.button("Submit Players"):
     # Step 1: Delete existing entries for this team/week (avoid duplicates)
     db_utils.delete_prev_roster(selected_team, selected_week)
 
-    active_roster = list(starters['Name'])
-    deactive_roster = list(bench['Name'])
+    starters = st.session_state.starters
+    bench = st.session_state.bench
 
     # Step 2: Prepare new rows
     starter_rows = [
@@ -151,13 +154,13 @@ if "swap2" not in st.session_state:
     
 # --- Starter selection ---
 swap1_options = [""] + starters["Name"].tolist()
-swap1_index = swap1_options.index(st.session_state.swap1) if st.session_state.swap1 in starters["Name"].tolist() else 0
+swap1_index = swap1_options.index(st.session_state.swap1) if st.session_state.swap1 in st.session_state.starters["Name"].tolist() else 0
 st.session_state.swap1 = st.selectbox("Select Starter to swap out", swap1_options, index=swap1_index)
 
 # --- Bench selection (filtered by position of starter) ---
 if st.session_state.swap1:
     pos1 = my_roster.loc[my_roster["Name"] == st.session_state.swap1, "Pos."].values[0]
-    swap2_list = bench[bench["Pos."].str.endswith(pos1)]["Name"].tolist()
+    swap2_list = st.session_state.bench[st.session_state.bench["Pos."].str.endswith(pos1)]["Name"].tolist()
 else:
     swap2_list = []
 
