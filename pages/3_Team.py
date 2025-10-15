@@ -112,7 +112,7 @@ if st.button("Submit Players"):
         "team": row["team"],
         "week": selected_week
     }
-    for _, row in active_roster.iterrows()
+    for _, row in starters.iterrows()
     ]
     bench_rows = [
     {
@@ -123,7 +123,7 @@ if st.button("Submit Players"):
         "team": row["team"],
         "week": selected_week
     }
-    for _, row in deactive_roster.iterrows()
+    for _, row in bench.iterrows()
     ]
     
     all_rows = starter_rows + bench_rows
