@@ -99,8 +99,6 @@ bench = my_roster[my_roster["Pos."].str.startswith("Bench") & (my_roster["Name"]
 weeks = list(range(1, 12))  # or pull from your schedule dynamically
 selected_week = st.selectbox("Select Week", weeks)
 
-st.dataframe(starters)
-
 if st.button("Submit Players"):
     # Step 1: Delete existing entries for this team/week (avoid duplicates)
     db_utils.delete_prev_roster(selected_team, selected_week)
@@ -118,7 +116,7 @@ if st.button("Submit Players"):
             "team": row["team"],
             "week": selected_week
         }
-        for _, row in active_roster.iterrows()
+        for _, row in starters.iterrows()
     ]
     
     bench_rows = [
@@ -130,7 +128,7 @@ if st.button("Submit Players"):
             "team": row["team"],
             "week": selected_week
         }
-        for _, row in deactive_roster.iterrows()
+        for _, row in bench.iterrows()
     ]
 
     all_rows = starter_rows + bench_rows
