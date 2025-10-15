@@ -9,6 +9,8 @@ managers = db_utils.load_teams()
 rosters_df = db_utils.load_roster()
 points = db_utils.load_points()
 
+st.dataframe(points.head(10))
+
 matchups_df = (
         matchups_df
         .merge(managers.rename(columns={"team_name": "home_team", "manager": "manager_1"}), on="home_team")
