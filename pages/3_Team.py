@@ -84,15 +84,15 @@ selected_week = st.selectbox("Select Week", weeks)
 
 if st.button("Submit Players"):
     # Step 1: Delete existing entries for this team/week (avoid duplicates)
-    db_utils.delete_prev_roster(team_name, selected_week)
+    db_utils.delete_prev_roster(selected_team, selected_week)
 
     # Step 2: Prepare new rows
     starter_rows = [
-        {"team_name": team_name, "player_name": p, "player_pos": "starter", "week": selected_week}
+        {"team_name": selected_team, "player_name": p, "player_pos": "starter", "week": selected_week}
         for p in starters
     ]
     bench_rows = [
-        {"team_name": team_name, "player_name": p, "player_pos": "bench", "week": selected_week}
+        {"team_name": selected_team, "player_name": p, "player_pos": "bench", "week": selected_week}
         for p in bench
     ]
     all_rows = starter_rows + bench_rows
