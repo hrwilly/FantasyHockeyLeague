@@ -91,7 +91,8 @@ def build_roster(players_df, team_name):
 st.subheader(f"{selected_team}'s Roster")
 my_roster = build_roster(players, selected_team)
 st.session_state['roster'] = my_roster
-st.table(st.session_state.roster)
+roster_placeholder = st.empty()  # create empty placeholder
+roster_placeholder.table(st.session_state.roster)
 
 # --- Build starter & bench lists from displayed roster ---
 starters = my_roster[~my_roster["Pos."].str.startswith("Bench") & (my_roster["Name"] != "---")]
@@ -187,6 +188,6 @@ if st.button("Swap Players") and st.session_state.swap1 and st.session_state.swa
     st.session_state.swap2 = ""
 
     # Rebuild roster immediately
-    my_roster = build_roster(players, selected_team)
-    st.session_state.roster = my_roster
+    st.session_state.roster = build_roster(players, selected_team)
+    roster_placeholder.table(st.session_state.roster)  # updates in-place
     #st.table(my_roster)
