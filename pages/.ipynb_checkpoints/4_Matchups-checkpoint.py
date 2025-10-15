@@ -70,7 +70,7 @@ st.divider()
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown(f"### {selected_matchup['home_team']} Lineup")
+    st.markdown(f"###Lineup")
     st.subheader("Starters")
     #st.dataframe(team1_starters[["player_name", "player_pos"]], hide_index=True)
     st.divider()
@@ -78,9 +78,9 @@ with col1:
     #st.dataframe(team1_bench[["player_name", "player_pos"]], hide_index=True)
 
 with col2:
-    st.markdown(f"### {selected_matchup['away_team']} Lineup")
-    st.subheader("Starters")
+    st.markdown(f"###Lineup")
+    st.caption("Starters")
     #st.dataframe(team2_starters[["player_name", "player_pos"]], hide_index=True)
     st.divider()
-    st.subheader("Bench")
+    st.caption("Bench")
     #st.dataframe(team2_bench[["player_name", "player_pos"]], hide_index=True)
