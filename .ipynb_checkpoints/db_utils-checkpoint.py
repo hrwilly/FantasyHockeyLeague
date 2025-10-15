@@ -177,3 +177,7 @@ def delete_prev_roster(team_name, selected_week):
 
 def submit_roster(all_rows):
     supabase.table("active_roster").insert(all_rows).execute()
+
+def load_roster():
+    data = supabase.table("active_roster").select("*").execute().data
+    return pd.DataFrame(data)
