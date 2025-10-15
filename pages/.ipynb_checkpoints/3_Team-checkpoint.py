@@ -103,9 +103,9 @@ st.dataframe(starters)
 
 if st.button("Submit Players"):
     # Step 1: Delete existing entries for this team/week (avoid duplicates)
-    db_utils.delete_prev_roster(selected_team, selected_week)
+    #db_utils.delete_prev_roster(selected_team, selected_week)
 
-    active_roster = list(starters['Name'])
+    '''active_roster = list(starters['Name'])
     deactive_roster = list(bench['Name'])
 
     # Step 2: Prepare new rows
@@ -119,7 +119,7 @@ if st.button("Submit Players"):
     ]
     all_rows = starter_rows + bench_rows
 
-    db_utils.submit_roster(all_rows)
+    db_utils.submit_roster(all_rows)'''
 
     st.success(f"✅ Lineup for Week {selected_week} submitted successfully!")
 
