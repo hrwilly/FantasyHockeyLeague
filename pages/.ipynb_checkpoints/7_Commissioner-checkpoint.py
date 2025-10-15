@@ -51,9 +51,12 @@ def compute_fantasy_points(data):
     scored['FantasyPoints'] = round(scored.sum(axis=1), 1)
     return scored
 
+selected_week = st.selectbox("Select week", sorted(matchups_df["week"].unique()))
+st.session_state['selected_week'] = selected_week
+
 # --- Run Weekly Scoring ---
 if st.button("🏁 Run Weekly Scoring"):
-    st.markdown('Running scoring...')
+    st.markdown(f'Running scoring for week {st.sessIon_state.selected_week}...')
 
     coll_teams = get_team_names()
     current_cum = pd.DataFrame()
@@ -75,7 +78,7 @@ if st.button("🏁 Run Weekly Scoring"):
     st.session_state['weekly_scored'] = weekly_scored
     st.session_state['current_cum'] = current_cum
 
-    st.success(f"✅ Weekly scoring calculated for {date.today().strftime('%Y-%m-%d')}")
+    st.success(f"✅ Weekly scoring calculated for Week {st.session_state.selected_week}")
     st.dataframe(weekly_scored.head(50))
     st.dataframe(current_cum.head(50))
 
@@ -91,5 +94,5 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
 
     db_utils.save_weekly_points(points)
     db_utils.save_last_week_stats(current_cum)
-    st.success(f"✅ Weekly scoring saved for {date.today().strftime('%Y-%m-%d')}")
+    st.success(f"✅ Weekly scoring saved for {st.sessIon_state.selected_week}")
 
