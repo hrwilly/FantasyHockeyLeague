@@ -93,7 +93,7 @@ roster_placeholder = st.empty()
 roster_placeholder.table(st.session_state.roster)
 
 # --- Week selection ---
-weeks = list(range(1, 12))
+weeks = list(range(1, 16))
 selected_week = st.selectbox("Select Week", weeks)
 
 # --- Submit Players ---
