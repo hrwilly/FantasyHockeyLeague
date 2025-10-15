@@ -17,7 +17,6 @@ if time.time() - st.session_state["last_refresh"] > refresh_interval:
 if "teams" not in st.session_state:
     st.session_state.teams = db_utils.load_teams()
 teams = st.session_state.teams
-
 if teams.empty:
     st.warning("No teams registered yet.")
     st.stop()
@@ -32,16 +31,20 @@ if "players" not in st.session_state:
     total = total.reset_index()[['Name','team','CumulativePts']]
     players = pd.merge(players, weekly, on=['Name','team'], how='left')
     players = pd.merge(players, total, on=['Name','team'], how='left').rename({'FantasyPoints':'WeeklyPts'}, axis=1)
-    st.session_state.players = players
+    st.session_state['players'] = players
 players = st.session_state.players
 
 # --- Select your team ---
-st.session_state["team_name"] = st.selectbox("Select your team:", teams["team_name"])
-selected_team = st.session_state["team_name"]
+selected_team = st.selectbox(
+    "Select your team:", 
+    teams["team_name"], 
+    index=teams["team_name"].tolist().index(st.session_state.get("team_name", teams["team_name"].iloc[0]))
+)
+st.session_state.team_name = selected_team
 
 # --- Build roster function ---
 def build_roster(players_df, team_name):
-    roster_template = {"F": 6, "D": 4, "G": 2}  # starting positions
+    roster_template = {"F": 6, "D": 4, "G": 2}
     num_bench = 5
     team_players = players_df[players_df["held_by"] == team_name].copy()
 
@@ -49,26 +52,14 @@ def build_roster(players_df, team_name):
     roster_rows = []
     for pos, slots in roster_template.items():
         for _ in range(slots):
-            roster_rows.append({
-                "Pos.": pos,
-                "Name": "---",
-                "team": "---",
-                "WeeklyPts": "---",
-                "CumulativePts": "---"
-            })
+            roster_rows.append({"Pos.": pos, "Name": "---", "team": "---", "WeeklyPts": "---", "CumulativePts": "---"})
     for _ in range(num_bench):
-        roster_rows.append({
-            "Pos.": "Bench",
-            "Name": "---",
-            "team": "---",
-            "WeeklyPts": "---",
-            "CumulativePts": "---"
-        })
+        roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---", "WeeklyPts": "---", "CumulativePts": "---"})
     my_roster = pd.DataFrame(roster_rows)
 
     # Counters for starters per position
     pos_counts = {pos: 0 for pos in roster_template.keys()}
-    bench_index = sum(roster_template.values())  # first bench slot
+    bench_index = sum(roster_template.values())
 
     for _, row in team_players.iterrows():
         pos = row["Pos."]
@@ -89,31 +80,17 @@ def build_roster(players_df, team_name):
             bench_index += 1
     return my_roster
 
-# --- Display roster with placeholder ---
-st.subheader(f"{selected_team}'s Roster")
-if "roster" not in st.session_state:
-    st.session_state.roster = build_roster(players, selected_team)
-roster_placeholder = st.empty()
-roster_placeholder.table(st.session_state.roster)
-
-# Track last selected team
-if "last_team" not in st.session_state:
-    st.session_state.last_team = selected_team
-
-# Rebuild roster if team changed
-if st.session_state.last_team != selected_team:
-    st.session_state.roster = build_roster(st.session_state.players, selected_team)
-    st.session_state.starters = st.session_state.roster[~st.session_state.roster["Pos."].str.startswith("Bench") &
-                                                       (st.session_state.roster["Name"] != "---")]
-    st.session_state.bench = st.session_state.roster[st.session_state.roster["Pos."].str.startswith("Bench") &
-                                                     (st.session_state.roster["Name"] != "---")]
-    st.session_state.last_team = selected_team
-
-# --- Build starter & bench lists ---
+# --- Build roster for selected team ---
+st.session_state.roster = build_roster(st.session_state.players, selected_team)
 st.session_state.starters = st.session_state.roster[~st.session_state.roster["Pos."].str.startswith("Bench") & 
                                                    (st.session_state.roster["Name"] != "---")]
 st.session_state.bench = st.session_state.roster[st.session_state.roster["Pos."].str.startswith("Bench") & 
                                                  (st.session_state.roster["Name"] != "---")]
+
+# --- Display roster ---
+st.subheader(f"{selected_team}'s Roster")
+roster_placeholder = st.empty()
+roster_placeholder.table(st.session_state.roster)
 
 # --- Week selection ---
 weeks = list(range(1, 16))
@@ -147,8 +124,7 @@ if st.button("Submit Players"):
         } for _, row in bench.iterrows()
     ]
 
-    all_rows = starter_rows + bench_rows
-    db_utils.submit_roster(all_rows)
+    db_utils.submit_roster(starter_rows + bench_rows)
     st.success(f"✅ Lineup for Week {selected_week} submitted successfully!")
 
 # --- Swap Players ---
