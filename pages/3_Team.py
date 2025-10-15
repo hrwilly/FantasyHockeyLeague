@@ -103,7 +103,7 @@ st.session_state.bench = st.session_state.roster[st.session_state.roster["Pos."]
                                                  (st.session_state.roster["Name"] != "---")]
 
 # --- Week selection ---
-weeks = list(range(1, 12))
+weeks = list(range(1, 16))
 selected_week = st.selectbox("Select Week", weeks)
 
 # --- Submit Players ---
