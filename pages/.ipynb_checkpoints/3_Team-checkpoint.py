@@ -89,7 +89,11 @@ def build_roster(players_df, team_name):
 
 # --- Display roster ---
 st.subheader(f"{selected_team}'s Roster")
-my_roster = build_roster(players, selected_team)
+# --- Build or load roster into session state ---
+if "my_roster" not in st.session_state or st.session_state.get("team_name") != selected_team:
+    st.session_state.my_roster = build_roster(players, selected_team)
+
+my_roster = st.session_state.my_roster
 st.table(my_roster)
 
 # --- Build starter & bench lists from displayed roster ---
@@ -160,19 +164,24 @@ st.session_state.swap2 = st.selectbox("Select Bench player to swap in", swap2_op
 
 # --- Swap action ---
 if st.button("Swap Players") and st.session_state.swap1 and st.session_state.swap2:
-    # Find indices in the main players DataFrame
-    idx1 = players.index[players["Name"] == st.session_state.swap1][0]
-    idx2 = players.index[players["Name"] == st.session_state.swap2][0]
+    # Get copies from session state roster
+    my_roster = st.session_state.my_roster.copy()
 
-    # Swap rows completely to preserve all info
-    players.loc[[idx1, idx2]] = players.loc[[idx2, idx1]].values
+    # Find positions
+    idx1 = my_roster.index[my_roster["Name"] == st.session_state.swap1][0]
+    idx2 = my_roster.index[my_roster["Name"] == st.session_state.swap2][0]
+
+    # Swap entire rows
+    my_roster.loc[[idx1, idx2]] = my_roster.loc[[idx2, idx1]].values
+
+    # Save updated roster in session state
+    st.session_state.my_roster = my_roster
+
+    # Update displayed table at top
+    roster_placeholder.table(st.session_state.my_roster)
 
     st.success(f"Swapped {st.session_state.swap1} and {st.session_state.swap2}")
 
     # Reset selections
     st.session_state.swap1 = ""
     st.session_state.swap2 = ""
-
-    # Rebuild roster immediately
-    my_roster = build_roster(players, selected_team)
-    st.table(my_roster)
