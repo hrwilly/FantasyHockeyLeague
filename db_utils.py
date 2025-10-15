@@ -172,8 +172,8 @@ def load_matchups():
     return pd.DataFrame(data)
 
 def delete_prev_roster(team_name, selected_week):
-    supabase.table("active_rosters").delete().eq("team_name", team_name).eq("week", selected_week).execute()
+    supabase.table("active_roster").delete().eq("team_name", team_name).eq("week", selected_week).execute()
 
 
 def submit_roster(all_rows):
-    supabase.table("active_rosters").insert(all_rows).execute()
+    supabase.table("active_roster").insert(all_rows).execute()

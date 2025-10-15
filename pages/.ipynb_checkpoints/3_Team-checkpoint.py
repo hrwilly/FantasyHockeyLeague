@@ -84,10 +84,7 @@ selected_week = st.selectbox("Select Week", weeks)
 
 if st.button("Submit Players"):
     # Step 1: Delete existing entries for this team/week (avoid duplicates)
-    try:
-        db_utils.delete_prev_roster(selected_team, selected_week)
-    except:
-        pass
+    db_utils.delete_prev_roster(selected_team, selected_week)
 
     # Step 2: Prepare new rows
     starter_rows = [
