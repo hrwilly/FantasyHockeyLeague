@@ -18,10 +18,12 @@ matchups_df = (
         .merge(managers.rename(columns={"team_name": "away_team", "manager": "manager_2"}), on="away_team")
     )
 
-
 selected_week = st.selectbox("Select week", sorted(matchups_df["week"].unique()))
 week_matchups = matchups_df[matchups_df["week"] == selected_week]
 week_rosters = rosters_df[rosters_df['week'] == selected_week]
+week_points = points[points['Week'] == selected_week]
+
+week_rosters = week_rosters.merge(week_points.drop(['Week'], axis = 1).rename(columns = {'Name' : 'player_name', 'FantasyPoints' : 'points'}), on = ['player_name', 'team'])
 
 st.dataframe(week_matchups.set_index('week').drop(['manager_1', 'manager_2'], axis = 1))
 
