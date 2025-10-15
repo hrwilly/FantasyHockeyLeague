@@ -85,26 +85,12 @@ def build_roster(players_df, team_name):
 
     return my_roster
 
-if "team_name" not in st.session_state or st.session_state["team_name"] != selected_team:
-    # Team changed → rebuild roster
-    st.session_state["team_name"] = selected_team
-    st.session_state["my_roster"] = build_roster(players, selected_team)
+
 
 # --- Display roster ---
 st.subheader(f"{selected_team}'s Roster")
-roster_placeholder = st.empty()
-roster_placeholder.table(st.session_state["my_roster"])
-my_roster = st.session_state["my_roster"]
-
-# --- Display roster ---
-st.subheader(f"{selected_team}'s Roster")
-# --- Build or load roster into session state ---
-if "my_roster" not in st.session_state or st.session_state.get("team_name") != selected_team:
-    st.session_state.my_roster = build_roster(players, selected_team)
-
-roster_placeholder = st.empty()
-roster_placeholder.table(st.session_state.my_roster)
-my_roster = st.session_state.my_roster
+my_roster = build_roster(players, selected_team)
+st.table(my_roster)
 
 # --- Build starter & bench lists from displayed roster ---
 starters = my_roster[~my_roster["Pos."].str.startswith("Bench") & (my_roster["Name"] != "---")]
@@ -113,33 +99,40 @@ bench = my_roster[my_roster["Pos."].str.startswith("Bench") & (my_roster["Name"]
 weeks = list(range(1, 12))  # or pull from your schedule dynamically
 selected_week = st.selectbox("Select Week", weeks)
 
+st.dataframe(starters)
+
 if st.button("Submit Players"):
     # Step 1: Delete existing entries for this team/week (avoid duplicates)
     db_utils.delete_prev_roster(selected_team, selected_week)
 
+    active_roster = list(starters['Name'])
+    deactive_roster = list(bench['Name'])
+
+    # Step 2: Prepare new rows
     starter_rows = [
-    {
-        "team_name": selected_team,
-        "player_name": row["Name"],
-        "player_pos": "starter",
-        "Pos.": row["Pos."],
-        "team": row["team"],
-        "week": selected_week
-    }
-    for _, row in starters.iterrows()
-    ]
-    bench_rows = [
-    {
-        "team_name": selected_team,
-        "player_name": row["Name"],
-        "player_pos": "bench",
-        "Pos.": row["Pos."],
-        "team": row["team"],
-        "week": selected_week
-    }
-    for _, row in bench.iterrows()
+        {
+            "team_name": selected_team,
+            "player_name": row["Name"],
+            "player_pos": "starter",
+            "Pos.": row["Pos."],
+            "team": row["team"],
+            "week": selected_week
+        }
+        for _, row in active_roster.iterrows()
     ]
     
+    bench_rows = [
+        {
+            "team_name": selected_team,
+            "player_name": row["Name"],
+            "player_pos": "bench",
+            "Pos.": row["Pos."],
+            "team": row["team"],
+            "week": selected_week
+        }
+        for _, row in deactive_roster.iterrows()
+    ]
+
     all_rows = starter_rows + bench_rows
 
     db_utils.submit_roster(all_rows)
@@ -174,33 +167,22 @@ st.session_state.swap2 = st.selectbox("Select Bench player to swap in", swap2_op
 
 # --- Swap action ---
 if st.button("Swap Players") and st.session_state.swap1 and st.session_state.swap2:
-    my_roster = st.session_state.my_roster.copy()
+    # Find indices in the main players DataFrame
+    idx1 = players.index[players["Name"] == st.session_state.swap1][0]
+    idx2 = players.index[players["Name"] == st.session_state.swap2][0]
 
-    # Find indices
-    idx1 = my_roster.index[my_roster["Name"] == st.session_state.swap1][0]  # starter
-    idx2 = my_roster.index[my_roster["Name"] == st.session_state.swap2][0]  # bench
+    # Swap rows completely to preserve all info
+    players.loc[[idx1, idx2]] = players.loc[[idx2, idx1]].values
 
-    # Get the positions
-    pos1 = my_roster.loc[idx1, "Pos."]
-    pos2 = my_roster.loc[idx2, "Pos."]
+    players.loc[idx2, "Pos."] = f"Bench - {base_pos}"
+    players.loc[idx1, "Pos."] = base_pos
 
-    # Swap only player-related fields
-    cols_to_swap = ["Name", "team", "WeeklyPts", "CumulativePts"]
-    temp = my_roster.loc[idx1, cols_to_swap].copy()
-    my_roster.loc[idx1, cols_to_swap] = my_roster.loc[idx2, cols_to_swap].values
-    my_roster.loc[idx2, cols_to_swap] = temp.values
-
-    # Fix the Pos. labels to reflect new starter/bench roles
-    base_pos = pos1 if not pos1.startswith("Bench") else pos2.split("Bench - ")[-1]
-    my_roster.loc[idx1, "Pos."] = base_pos
-    my_roster.loc[idx2, "Pos."] = f"Bench - {base_pos}"
-
-    # Save and refresh
-    st.session_state.my_roster = my_roster
-    roster_placeholder.table(my_roster)
-
-    st.success(f"Swapped {st.session_state.swap1} (to bench) and {st.session_state.swap2} (to starter)")
+    st.success(f"Swapped {st.session_state.swap1} and {st.session_state.swap2}")
 
     # Reset selections
     st.session_state.swap1 = ""
     st.session_state.swap2 = ""
+
+    # Rebuild roster immediately
+    my_roster = build_roster(players, selected_team)
+    st.table(my_roster)
