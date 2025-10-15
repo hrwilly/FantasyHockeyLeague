@@ -176,3 +176,4 @@ if st.button("Swap Players") and st.session_state.swap1 and st.session_state.swa
     # Reset selections
     st.session_state.swap1 = ""
     st.session_state.swap2 = ""
+    st.success("✅ Players swapped successfully!")
