@@ -12,10 +12,6 @@ week_matchups = matchups_df[matchups_df["week"] == selected_week]
 st.dataframe(week_matchups)
 
 weeks = sorted(matchups_df["week"].unique())
-selected_week = st.selectbox("Select Week", weeks)
-
-# --- Filter matchups for that week ---
-week_matchups = matchups_df.query("week == @selected_week")
 
 # --- Create matchup labels like 'Team1 vs Team2' ---
 week_matchups["matchup_label"] = week_matchups.apply(
