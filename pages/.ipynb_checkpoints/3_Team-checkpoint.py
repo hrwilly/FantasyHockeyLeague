@@ -99,27 +99,36 @@ bench = my_roster[my_roster["Pos."].str.startswith("Bench") & (my_roster["Name"]
 weeks = list(range(1, 12))  # or pull from your schedule dynamically
 selected_week = st.selectbox("Select Week", weeks)
 
-st.dataframe(starters)
-
 if st.button("Submit Players"):
     # Step 1: Delete existing entries for this team/week (avoid duplicates)
-    #db_utils.delete_prev_roster(selected_team, selected_week)
+    db_utils.delete_prev_roster(selected_team, selected_week)
 
-    '''active_roster = list(starters['Name'])
-    deactive_roster = list(bench['Name'])
-
-    # Step 2: Prepare new rows
     starter_rows = [
-        {"team_name": selected_team, "player_name": p, "player_pos": "starter", 'Pos.' : , "week": selected_week, 'team' :}
-        for p in active_roster
+    {
+        "team_name": selected_team,
+        "player_name": row["Name"],
+        "player_pos": "starter",
+        "Pos.": row["Pos."],
+        "team": row["team"],
+        "week": selected_week
+    }
+    for _, row in active_roster.iterrows()
     ]
     bench_rows = [
-        {"team_name": selected_team, "player_name": p, "player_pos": "bench", "week": selected_week}
-        for p in deactive_roster
+    {
+        "team_name": selected_team,
+        "player_name": row["Name"],
+        "player_pos": "bench",
+        "Pos.": row["Pos."],
+        "team": row["team"],
+        "week": selected_week
+    }
+    for _, row in deactive_roster.iterrows()
     ]
+    
     all_rows = starter_rows + bench_rows
 
-    db_utils.submit_roster(all_rows)'''
+    db_utils.submit_roster(all_rows)
 
     st.success(f"✅ Lineup for Week {selected_week} submitted successfully!")
 
