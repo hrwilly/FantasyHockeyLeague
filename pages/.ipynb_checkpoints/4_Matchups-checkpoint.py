@@ -21,7 +21,10 @@ week_matchups = matchups_df[matchups_df["week"] == selected_week]
 week_rosters = rosters_df[rosters_df['week'] == selected_week]
 week_points = points[points['Week'] == selected_week]
 
-week_rosters = week_rosters.merge(week_points.drop(['Week'], axis = 1).rename(columns = {'Name' : 'player_name', 'FantasyPoints' : 'points'}), on = ['player_name', 'team'])
+if len(week_points) != 0:
+    week_rosters = week_rosters.merge(week_points.drop(['Week'], axis = 1).rename(columns = {'Name' : 'player_name', 'FantasyPoints' : 'points'}), on = ['player_name', 'team'])
+else:
+    week_rosters['points'] = [0] * len(week_rosters)
 
 st.dataframe(week_matchups.set_index('week').drop(['manager_1', 'manager_2'], axis = 1))
 
