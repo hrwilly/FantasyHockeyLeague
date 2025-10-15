@@ -166,7 +166,6 @@ if st.button("Swap Players") and st.session_state.swap1 and st.session_state.swa
 
     # Swap rows completely to preserve all info
     players.loc[[idx1, idx2]] = players.loc[[idx2, idx1]].values
-    db_utils.save_players(players)
 
     st.success(f"Swapped {st.session_state.swap1} and {st.session_state.swap2}")
 
