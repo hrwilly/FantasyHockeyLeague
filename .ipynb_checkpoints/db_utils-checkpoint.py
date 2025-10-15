@@ -165,3 +165,8 @@ def load_points(batch_size=100, max_retries=3, delay=2):
             break
 
     return pd.DataFrame(all_rows)
+
+def load_matchups():
+
+    data = supabase.table("matchups").select("*").execute().data
+    return pd.DataFrame(data)
