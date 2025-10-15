@@ -40,7 +40,7 @@ selected_matchup = week_matchups[
 
 
 # --- Display matchup info ---
-st.markdown(f"## {selected_matchup['home_team']} vs {selected_matchup['away_team']}")
+st.markdown(f"## 🏒{selected_matchup['home_team']} vs {selected_matchup['away_team']}🏒")
 col1, col2 = st.columns(2)
 
 with col1:
