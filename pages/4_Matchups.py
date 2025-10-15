@@ -23,8 +23,6 @@ week_points = points[points['Week'] == selected_week]
 
 week_rosters = week_rosters.merge(week_points.drop(['Week'], axis = 1).rename(columns = {'Name' : 'player_name', 'FantasyPoints' : 'points'}), on = ['player_name', 'team'])
 
-st.dataframe(week_points)
-
 st.dataframe(week_matchups.set_index('week').drop(['manager_1', 'manager_2'], axis = 1))
 
 weeks = sorted(matchups_df["week"].unique())
