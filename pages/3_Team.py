@@ -75,15 +75,6 @@ st.subheader(f"{selected_team}'s Roster")
 my_roster = build_roster(players, selected_team)
 st.table(my_roster)
 
-# --- Interactive Swap ---
-st.subheader("Swap Players (Starters ↔ Bench)")
-
-# Initialize session state for swaps
-if "swap1" not in st.session_state:
-    st.session_state.swap1 = ""
-if "swap2" not in st.session_state:
-    st.session_state.swap2 = ""
-
 # --- Build starter & bench lists from displayed roster ---
 starters = my_roster[~my_roster["Pos."].str.startswith("Bench") & (my_roster["Name"] != "---")]
 bench = my_roster[my_roster["Pos."].str.startswith("Bench") & (my_roster["Name"] != "---")]
@@ -111,6 +102,15 @@ if st.button("Submit Players"):
     st.success(f"✅ Lineup for Week {selected_week} submitted successfully!")
 
 
+# --- Interactive Swap ---
+st.subheader("Swap Players (Starters ↔ Bench)")
+
+# Initialize session state for swaps
+if "swap1" not in st.session_state:
+    st.session_state.swap1 = ""
+if "swap2" not in st.session_state:
+    st.session_state.swap2 = ""
+    
 # --- Starter selection ---
 swap1_options = [""] + starters["Name"].tolist()
 swap1_index = swap1_options.index(st.session_state.swap1) if st.session_state.swap1 in starters["Name"].tolist() else 0
