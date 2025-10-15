@@ -96,6 +96,19 @@ if "roster" not in st.session_state:
 roster_placeholder = st.empty()
 roster_placeholder.table(st.session_state.roster)
 
+# Track last selected team
+if "last_team" not in st.session_state:
+    st.session_state.last_team = selected_team
+
+# Rebuild roster if team changed
+if st.session_state.last_team != selected_team:
+    st.session_state.roster = build_roster(st.session_state.players, selected_team)
+    st.session_state.starters = st.session_state.roster[~st.session_state.roster["Pos."].str.startswith("Bench") &
+                                                       (st.session_state.roster["Name"] != "---")]
+    st.session_state.bench = st.session_state.roster[st.session_state.roster["Pos."].str.startswith("Bench") &
+                                                     (st.session_state.roster["Name"] != "---")]
+    st.session_state.last_team = selected_team
+
 # --- Build starter & bench lists ---
 st.session_state.starters = st.session_state.roster[~st.session_state.roster["Pos."].str.startswith("Bench") & 
                                                    (st.session_state.roster["Name"] != "---")]
