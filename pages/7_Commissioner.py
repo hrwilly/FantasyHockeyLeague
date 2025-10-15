@@ -51,7 +51,7 @@ def compute_fantasy_points(data):
     scored['FantasyPoints'] = round(scored.sum(axis=1), 1)
     return scored
 
-selected_week = st.selectbox("Select week", sorted(matchups_df["week"].unique()))
+selected_week = st.selectbox("Select week", list(range(1, 12))))
 st.session_state['selected_week'] = selected_week
 
 # --- Run Weekly Scoring ---
