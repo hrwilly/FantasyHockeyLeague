@@ -81,7 +81,7 @@ col1, col2 = st.columns(2)
 with col1:
     st.markdown(f"### Lineup")
     st.caption("Starters")
-    st.dataframe(team1_starters[["player_name", "Pos.", 'points']], hide_index=True, height = 430)
+    st.dataframe(team1_starters[["player_name", "Pos.", 'points']], hide_index=True, height = 460)
     st.divider()
     st.caption("Bench")
     st.dataframe(team1_bench[["player_name", "Pos.", 'points']], hide_index=True)
@@ -89,7 +89,7 @@ with col1:
 with col2:
     st.markdown(f"### Lineup")
     st.caption("Starters")
-    st.dataframe(team2_starters[["player_name", "Pos.", 'points']], hide_index=True, height = 430)
+    st.dataframe(team2_starters[["player_name", "Pos.", 'points']], hide_index=True, height = 460)
     st.divider()
     st.caption("Bench")
     st.dataframe(team2_bench[["player_name", "Pos.", 'points']], hide_index=True)
