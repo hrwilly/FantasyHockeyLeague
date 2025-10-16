@@ -22,17 +22,15 @@ if teams.empty:
     st.stop()
 
 # --- Load players & points into session state only once ---
-if "players" not in st.session_state:
-    players = db_utils.load_players()
-    points = db_utils.load_points()
-    weekly = points[points['Week'] == max(points['Week'])][['Name', 'team', 'FantasyPoints']]
-    total = points.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='mean')
-    total['CumulativePts'] = round(total.sum(axis=1), 1)
-    total = total.reset_index()[['Name','team','CumulativePts']]
-    players = pd.merge(players, weekly, on=['Name','team'], how='left')
-    players = pd.merge(players, total, on=['Name','team'], how='left').rename({'FantasyPoints':'WeeklyPts'}, axis=1)
-    st.session_state['players'] = players
-players = st.session_state.players
+players = db_utils.load_players()
+points = db_utils.load_points()
+weekly = points[points['Week'] == max(points['Week'])][['Name', 'team', 'FantasyPoints']]
+total = points.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='mean')
+total['CumulativePts'] = round(total.sum(axis=1), 1)
+total = total.reset_index()[['Name','team','CumulativePts']]
+players = pd.merge(players, weekly, on=['Name','team'], how='left')
+players = pd.merge(players, total, on=['Name','team'], how='left').rename({'FantasyPoints':'WeeklyPts'}, axis=1)
+st.session_state['players'] = players
 
 # --- Select your team ---
 selected_team = st.selectbox(
