@@ -121,7 +121,7 @@ if st.button("Add & Drop Player"):
             # Perform add/drop
             players.loc[players["Name"] == add_name, "held_by"] = my_team_name
             players.loc[players["Name"] == drop_name, "held_by"] = None
-            db_utils.save_players(players)
+            db_utils.save_player(players)
             st.success(f"Added {add_name} and dropped {drop_name}")
 
             # Clear selections
