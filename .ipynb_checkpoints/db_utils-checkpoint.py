@@ -181,3 +181,12 @@ def submit_roster(all_rows):
 def load_roster():
     data = supabase.table("active_roster").select("*").execute().data
     return pd.DataFrame(data)
+
+def save_changed_players(current_df, previous_df):
+    # Compare current and previous DataFrames to detect changes
+    changed = current_df.ne(previous_df).any(axis=1)
+    changed_rows = current_df.loc[changed]
+
+    if not changed_rows.empty:
+        changed_rows = changed_rows.replace({np.nan: None, np.inf: None, -np.inf: None})
+        supabase.table("players").upsert(changed_rows.to_dict(orient="records")).execute()
