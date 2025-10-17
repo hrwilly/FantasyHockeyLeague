@@ -124,7 +124,11 @@ if st.button("Add & Drop Player"):
             players.loc[players["Name"] == drop_name, "held_by"] = None
             players = players.replace({np.nan: None, np.inf: None, -np.inf: None})
 
-            db_utils.save_changed_players(players[['Name', 'team', 'Yr.', 'Pos.', 'Ht.', 'Wt.', 'YOB', 'Hometown', 'Last Team', 'Draft Year', 'Draft Round', 'Draft Team', 'held_by']])
+            idx_add_players = players["Name"] == add_name
+            idx_drop_players = players["Name"] == drop_name
+
+            db_utils.save_player(players[['Name', 'team', 'Yr.', 'Pos.', 'Ht.', 'Wt.', 'YOB', 'Hometown', 'Last Team', 'Draft Year', 'Draft Round', 'Draft Team', 'held_by']].loc[idx_add_players].iloc[0])
+            db_utils.save_player(players[['Name', 'team', 'Yr.', 'Pos.', 'Ht.', 'Wt.', 'YOB', 'Hometown', 'Last Team', 'Draft Year', 'Draft Round', 'Draft Team', 'held_by']].loc[idx_drop_players].iloc[0])
             st.success(f"Added {add_name} and dropped {drop_name}")
 
             # Clear selections
