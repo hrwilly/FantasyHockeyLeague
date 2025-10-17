@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import db_utils
 from streamlit_autorefresh import st_autorefresh
 
