@@ -6,7 +6,7 @@ from streamlit_autorefresh import st_autorefresh
 st.title("Add / Drop Players")
 
 # --- Auto-refresh every 5 seconds ---
-st_autorefresh(interval=50000, key="players_autorefresh")
+st_autorefresh(interval=100000, key="players_autorefresh")
 
 # --- Load data ---
 teams = db_utils.load_teams()
@@ -121,6 +121,8 @@ if st.button("Add & Drop Player"):
             # Perform add/drop
             players.loc[players["Name"] == add_name, "held_by"] = my_team_name
             players.loc[players["Name"] == drop_name, "held_by"] = None
+
+            st.dataframe(players)
             db_utils.save_player(players)
             st.success(f"Added {add_name} and dropped {drop_name}")
 
