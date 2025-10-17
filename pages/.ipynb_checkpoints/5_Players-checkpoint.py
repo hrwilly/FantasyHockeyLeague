@@ -134,10 +134,3 @@ if st.button("Add & Drop Player"):
             # Clear selections
             st.session_state.add_player = ""
             st.session_state.drop_player = ""
-
-            # --- Dynamic update ---
-            display_df = build_roster_display(my_team_name)
-            st.table(display_df)
-            free_agents = get_free_agents()
-            st.dataframe(free_agents.set_index(['Name', 'team', 'Pos.']).drop(['held_by'], axis = 1),
-                         height=500, use_container_width=True, width = 'stretch')
