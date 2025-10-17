@@ -123,7 +123,6 @@ if st.button("Add & Drop Player"):
             players.loc[players["Name"] == drop_name, "held_by"] = None
             players = players.replace({np.nan: None, np.inf: None, -np.inf: None})
 
-            st.dataframe(players)
             db_utils.save_player(players)
             st.success(f"Added {add_name} and dropped {drop_name}")
 
