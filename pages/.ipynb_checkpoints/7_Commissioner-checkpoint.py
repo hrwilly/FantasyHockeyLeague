@@ -99,5 +99,6 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
 if st.button('Edit Points'):
 
     points = db_utils.load_points()
+    points = points[points['FantasyPoints'] != 0]
     st.dataframe(points)
 
