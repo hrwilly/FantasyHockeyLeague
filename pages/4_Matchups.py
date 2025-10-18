@@ -26,7 +26,7 @@ weekly_total['points'] = round(weekly_total.sum(axis=1), 1)
 weekly_total = weekly_total.reset_index()[['Name', 'team', 'points']]
 
 if len(week_points) != 0:
-    week_rosters = week_rosters.merge(weekly_total.rename(columns = {'Name' : 'player_name'}), on = ['player_name', 'team'])
+    week_rosters = week_rosters.merge(weekly_total.rename(columns = {'Name' : 'player_name'}), on = ['player_name', 'team'], how = 'left')
 else:
     week_rosters['points'] = [0] * len(week_rosters)
 
