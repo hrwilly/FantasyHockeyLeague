@@ -130,7 +130,7 @@ def save_weekly_points(df, week):
 
     # Copy to avoid modifying original
     df = df.copy()
-    df['Week'] = week
+    #df['Week'] = week
     
 
     # Convert to list of dicts for Supabase

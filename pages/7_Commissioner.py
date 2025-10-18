@@ -102,5 +102,6 @@ if st.button('Edit Points'):
     points = points[points['FantasyPoints'] != 0]
     points['Week'] = [1] * len(points)
     points['Day'] = [1] * len(points)
+    db_utils.save_weekly_points(points, 1)
     st.dataframe(points)
 
