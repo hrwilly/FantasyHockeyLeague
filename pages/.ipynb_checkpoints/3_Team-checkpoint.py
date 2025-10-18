@@ -31,7 +31,8 @@ if "players" not in st.session_state:
     total['CumulativePts'] = round(total.sum(axis=1), 1)
     total = total.reset_index()[['Name','team','CumulativePts']]
     players = pd.merge(players, weekly_total, on=['Name','team'], how='left')
-    players = pd.merge(players, total, on=['Name','team'], how='left').rename({'FantasyPoints':'WeeklyPts'}, axis=1)
+    st.dataframe(players)
+    players = pd.merge(players, total, on=['Name','team'], how='left')
     st.session_state.players = players
 else:
     players = st.session_state.players
