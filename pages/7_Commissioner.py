@@ -51,8 +51,10 @@ def compute_fantasy_points(data):
     scored['FantasyPoints'] = round(scored.sum(axis=1), 1)
     return scored
 
-selected_week = st.selectbox("Select week", [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5])
+selected_week = st.selectbox("Select week", np.arange(1, 16))
 st.session_state['selected_week'] = selected_week
+selected_day = st.selectbox("Select day", np.arange(1, 6))
+st.session_state['selected_day'] = selected_day
 
 # --- Run Weekly Scoring ---
 if st.button("🏁 Run Weekly Scoring"):
@@ -89,19 +91,11 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
     points = st.session_state['weekly_scored']
     points = points.reset_index()
     points = points[['Name', 'team', 'FantasyPoints']]
+    points = points[points['FantasyPoints'] != 0]
 
     current_cum = st.session_state['current_cum']
 
-    db_utils.save_weekly_points(points, st.session_state.selected_week)
+    db_utils.save_weekly_points(points, st.session_state.selected_week, st.session_state.selected_day)
     db_utils.save_last_week_stats(current_cum)
-    st.success(f"✅ Weekly scoring saved for Week {st.session_state.selected_week}")
-
-if st.button('Edit Points'):
-
-    points = db_utils.load_points()
-    points = points[points['FantasyPoints'] != 0]
-    points['Week'] = [1] * len(points)
-    points['Day'] = [1] * len(points)
-    db_utils.save_weekly_points(points, 1)
-    st.dataframe(points)
+    st.success(f"✅ Weekly scoring saved for Week {st.session_state.selected_week}, Day {st.session_state.selected_day},")
 
