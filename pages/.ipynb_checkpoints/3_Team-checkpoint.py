@@ -25,8 +25,8 @@ if teams.empty:
 if "players" not in st.session_state:
     players = db_utils.load_players()
     points = db_utils.load_points()
-    weekly = points[points['Week'] == max(points['Week'])][['Name', 'team', 'FantasyPoints']]
-    weekly_total = weekly.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
+    weekly = points[points['Week'] == max(points['Week'])][['Name', 'team', 'FantasyPoints', 'Day']]
+    weekly_total = weekly.pivot_table(columns='Day', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
     weekly_total['WeeklyPts'] = round(weekly_total.sum(axis=1), 1)
     total = points.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
     total['CumulativePts'] = round(total.sum(axis=1), 1)
