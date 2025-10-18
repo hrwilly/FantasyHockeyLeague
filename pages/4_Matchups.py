@@ -9,7 +9,6 @@ managers = db_utils.load_teams()
 rosters_df = db_utils.load_roster()
 points = db_utils.load_points()
 
-
 matchups_df = (
         matchups_df
         .merge(managers.rename(columns={"team_name": "home_team", "manager": "manager_1"}), on="home_team")
@@ -24,6 +23,8 @@ week_points = points[points['Week'] == selected_week]
 weekly = points[points['Week'] == selected_week][['Name', 'team', 'FantasyPoints', 'Week']]
 weekly_total = weekly.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
 weekly_total['points'] = round(weekly_total.sum(axis=1), 1)
+
+st.dataframe(weekly_total)
 
 if len(week_points) != 0:
     week_rosters = week_rosters.merge(weekly_total.rename(columns = {'Name' : 'player_name'}), on = ['player_name', 'team'])
