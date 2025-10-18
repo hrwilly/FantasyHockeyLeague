@@ -99,4 +99,5 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
 if st.button('Edit Points'):
 
     points = db_utils.load_points()
+    st.dataframe(points)
 
