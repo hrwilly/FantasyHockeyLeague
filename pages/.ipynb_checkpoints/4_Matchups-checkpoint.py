@@ -23,6 +23,7 @@ week_points = points[points['Week'] == selected_week]
 weekly = points[points['Week'] == selected_week][['Name', 'team', 'FantasyPoints', 'Week']]
 weekly_total = weekly.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
 weekly_total['points'] = round(weekly_total.sum(axis=1), 1)
+weekly_total = weekly_total[['Name', 'team', 'points']]
 
 st.dataframe(weekly_total)
 
