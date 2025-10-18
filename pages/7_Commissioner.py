@@ -96,3 +96,7 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
     db_utils.save_last_week_stats(current_cum)
     st.success(f"✅ Weekly scoring saved for Week {st.session_state.selected_week}")
 
+if st.button('Edit Points'):
+
+    points = db_utils.load_points()
+
