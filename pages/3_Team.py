@@ -26,7 +26,7 @@ if "players" not in st.session_state:
     players = db_utils.load_players()
     points = db_utils.load_points()
     weekly = points[points['Week'] == max(points['Week'])][['Name', 'team', 'FantasyPoints']]
-    total = points.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='mean')
+    total = points.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
     total['CumulativePts'] = round(total.sum(axis=1), 1)
     total = total.reset_index()[['Name','team','CumulativePts']]
     players = pd.merge(players, weekly, on=['Name','team'], how='left')
