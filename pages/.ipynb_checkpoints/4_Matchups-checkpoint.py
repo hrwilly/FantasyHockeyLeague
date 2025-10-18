@@ -30,6 +30,34 @@ if len(week_points) != 0:
 else:
     week_rosters['points'] = [0] * len(week_rosters)
 
+# Initialize new columns
+week_matchups["home_team_points"] = 0.0
+week_matchups["away_team_points"] = 0.0
+
+# Loop through each matchup and sum starter points
+for idx, row in week_matchups.iterrows():
+    home_team = row["home_team"]
+    away_team = row["away_team"]
+
+    home_points = (
+        week_rosters
+        .query("team_name == @home_team and player_pos == 'starter'")
+        ["points"]
+        .fillna(0)
+        .sum()
+    )
+
+    away_points = (
+        week_rosters
+        .query("team_name == @away_team and player_pos == 'starter'")
+        ["points"]
+        .fillna(0)
+        .sum()
+    )
+
+    week_matchups.loc[idx, "home_team_points"] = round(home_points, 1)
+    week_matchups.loc[idx, "away_team_points"] = round(away_points, 1)
+
 st.dataframe(week_matchups.set_index('week').drop(['manager_1', 'manager_2'], axis = 1))
 
 weeks = sorted(matchups_df["week"].unique())
