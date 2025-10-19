@@ -33,7 +33,7 @@ if "players" not in st.session_state:
     total = total.reset_index()[['Name','team','CumulativePts']]
     players = pd.merge(players, weekly_total, on=['Name','team'], how='left')
     players = pd.merge(players, total, on=['Name','team'], how='left')
-    st.session_state.players = players
+    st.session_state['players'] = players
 else:
     players = st.session_state.players
 
