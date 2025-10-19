@@ -104,6 +104,8 @@ if st.button('Run Matchups'):
     managers = db_utils.load_teams()
     rosters_df = db_utils.load_roster()
     points = db_utils.load_points()
+
+    st.session_state['team_stats'] = managers
     
     matchups_df = (
             matchups_df
@@ -158,3 +160,46 @@ if st.button('Run Matchups'):
     st.success(f"✅ Weekly matchup scores saved for Week {st.session_state.selected_week}")
 
     st.dataframe(week_matchups[['week', 'home_team', 'away_team', 'home_team_points', 'away_team_points']], hide_index = True)
+
+    st.session_state['weekly_matchups'] = week_matchups
+
+if 'weekly_matchups' in st.session_state and st.button('💾 Save Matchup Results'):
+
+    st.write(f"Processing week {selected_week}...")
+    week_matchups = st.session_state.weekly_matchups
+    teams_df = st.session_state.team_stats
+
+    # We'll update each team cumulatively
+    for _, row in week_matchups.iterrows():
+        home_team = row["home_team"]
+        away_team = row["away_team"]
+        home_points = row["home_team_points"]
+        away_points = row["away_team_points"]
+
+        # Get current team records
+        home_rec = teams_df.loc[teams_df["team_name"] == home_team].iloc[0]
+        away_rec = teams_df.loc[teams_df["team_name"] == away_team].iloc[0]
+
+        # Extract current stats
+        home_W, home_L, home_PF, home_PA = home_rec["W"], home_rec["L"], home_rec["PF"], home_rec["PA"]
+        away_W, away_L, away_PF, away_PA = away_rec["W"], away_rec["L"], away_rec["PF"], away_rec["PA"]
+
+        # Update PF/PA
+        home_PF += home_points
+        home_PA += away_points
+        away_PF += away_points
+        away_PA += home_points
+
+        # Determine winner/loser
+        if home_points > away_points:
+            home_W += 1
+            away_L += 1
+        elif away_points > home_points:
+            away_W += 1
+            home_L += 1
+
+        # Push updates back to Supabase
+        db_utils.update_team_record(home_team, W=home_W, L=home_L, PF=home_PF, PA=home_PA)
+        db_utils.update_team_record(away_team, W=away_W, L=away_L, PF=away_PF, PA=away_PA)
+
+    st.success(f"✅ Week {selected_week} processed successfully!")
