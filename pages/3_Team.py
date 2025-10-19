@@ -24,20 +24,18 @@ if teams.empty:
 # --- Load players & points only once ---
 if "players" not in st.session_state:
     players = db_utils.load_players()
+    points = db_utils.load_points()
+    weekly = points[points['Week'] == max(points['Week'])][['Name', 'team', 'FantasyPoints', 'Week']]
+    weekly_total = weekly.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
+    weekly_total['WeeklyPts'] = weekly_total.sum(axis=1)
+    total = points.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
+    total['CumulativePts'] = total.sum(axis=1)
+    total = total.reset_index()[['Name','team','CumulativePts']]
+    players = pd.merge(players, weekly_total, on=['Name','team'], how='left')
+    players = pd.merge(players, total, on=['Name','team'], how='left')
     st.session_state.players = players
 else:
     players = st.session_state.players
-
-points = db_utils.load_points()
-weekly = points[points['Week'] == max(points['Week'])][['Name', 'team', 'FantasyPoints', 'Week']]
-weekly_total = weekly.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
-weekly_total['WeeklyPts'] = weekly_total.sum(axis=1)
-total = points.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
-total['CumulativePts'] = total.sum(axis=1)
-total = total.reset_index()[['Name','team','CumulativePts']]
-players = pd.merge(players, weekly_total, on=['Name','team'], how='left')
-players = pd.merge(players, total, on=['Name','team'], how='left')
-st.session_state.players = players
 
 # --- Select your team ---
 selected_team = st.selectbox(
@@ -95,7 +93,7 @@ st.session_state.bench = st.session_state.roster[st.session_state.roster["Pos."]
 # --- Display roster ---
 st.subheader(f"{selected_team}'s Roster")
 roster_placeholder = st.empty()
-roster_placeholder.table(st.session_state.roster.style.format({"WeeklyPts": "{:.1f}", "CumulativePts": "{:.1f}"}, na_rep="0"))
+roster_placeholder.table(st.session_state.roster.style.format({"WeeklyPts": "{:.1f}", "CumulativePts": "{:.1f}"}, na_rep = '0'))
 
 # --- Week selection ---
 weeks = list(range(2, 16))
@@ -170,7 +168,7 @@ if st.button("Swap Players") and st.session_state.swap1 and st.session_state.swa
 
     # Rebuild roster
     st.session_state.roster = build_roster(st.session_state.players, selected_team)
-    roster_placeholder.table(st.session_state.roster.style.format({"WeeklyPts": "{:.1f}", "CumulativePts": "{:.1f}"}, na_rep="0"))
+    roster_placeholder.table(st.session_state.roster.style.format({"WeeklyPts": "{:.1f}", "CumulativePts": "{:.1f}"}, na_rep = '0'))
 
     # Update starters and bench
     st.session_state.starters = st.session_state.roster[~st.session_state.roster["Pos."].str.startswith("Bench") &
