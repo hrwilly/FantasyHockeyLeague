@@ -37,7 +37,6 @@ total['CumulativePts'] = total.sum(axis=1)
 total = total.reset_index()[['Name','team','CumulativePts']]
 players = pd.merge(players, weekly_total, on=['Name','team'], how='left')
 players = pd.merge(players, total, on=['Name','team'], how='left')
-players = round(players, 1)
 st.session_state.players = players
 
 # --- Select your team ---
@@ -96,7 +95,7 @@ st.session_state.bench = st.session_state.roster[st.session_state.roster["Pos."]
 # --- Display roster ---
 st.subheader(f"{selected_team}'s Roster")
 roster_placeholder = st.empty()
-roster_placeholder.table(st.session_state.roster)
+roster_placeholder.table(round(st.session_state.roster, 1), hide_index = True)
 
 # --- Week selection ---
 weeks = list(range(2, 16))
