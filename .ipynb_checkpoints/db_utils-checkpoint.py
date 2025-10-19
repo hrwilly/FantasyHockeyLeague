@@ -182,7 +182,7 @@ def load_roster():
     data = supabase.table("active_roster").select("*").execute().data
     return pd.DataFrame(data)
 
-def save_weekly_matchups(week_matchups: pd.DataFrame):
+def save_weekly_matchups(week_matchups: pd.DataFrame, week_num):
     """
     Saves weekly matchup results (Week, home_team, away_team, home_team_points, away_team_points)
     into the Supabase 'Matchups' table.
@@ -196,7 +196,6 @@ def save_weekly_matchups(week_matchups: pd.DataFrame):
     records = upload_df.to_dict(orient="records")
 
     # --- Delete any existing records for that week (to prevent duplicates) ---
-    week_num = upload_df["week"].iloc[0]
     supabase.table("Matchups").delete().eq("week", week_num).execute()
 
     # --- Insert new records ---
