@@ -6,4 +6,4 @@ st.title("Weekly Fantasy Points & Standings")
 
 standings = db_utils.load_teams()
 
-st.dataframe(standings[['Place', 'team_name', 'manager', 'W', 'L', 'PF', 'PA']], hide_index = True, height = 450)
+st.dataframe(standings[['Place', 'team_name', 'manager', 'W', 'L', 'PF', 'PA']], hide_index = True, height = 455)
