@@ -198,6 +198,10 @@ if 'weekly_matchups' in st.session_state and st.button('💾 Save Matchup Result
             away_W += 1
             home_L += 1
 
+        # ✅ Update local dataframe
+        teams_df.loc[teams_df["team_name"] == home_team, ["W", "L", "PF", "PA"]] = [home_W, home_L, home_PF, home_PA]
+        teams_df.loc[teams_df["team_name"] == away_team, ["W", "L", "PF", "PA"]] = [away_W, away_L, away_PF, away_PA]
+
     teams_df = teams_df.sort_values(by=["W", "L", "PF"], ascending=[False, True, False]).reset_index(drop=True)
     teams_df["Place"] = range(1, len(teams_df) + 1)
 
