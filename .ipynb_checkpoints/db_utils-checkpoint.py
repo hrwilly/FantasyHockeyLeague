@@ -201,7 +201,7 @@ def save_weekly_matchups(week_matchups: pd.DataFrame, week_num):
     # --- Insert new records ---
     supabase.table("matchups").insert(records).execute()
 
-def update_team_record(team_name, W=None, L=None, PF=None, PA=None):
+def update_team_record(team_name, W=None, L=None, PF=None, PA=None, Place=None):
     """Update individual team record values in Supabase."""
     updates = {}
     if W is not None:
@@ -212,6 +212,8 @@ def update_team_record(team_name, W=None, L=None, PF=None, PA=None):
         updates["PF"] = float(PF)
     if PA is not None:
         updates["PA"] = float(PA)
+    if Place is not None:
+        updates["Place"] = int(PA)
 
     if updates:
         supabase.table("teams").update(updates).eq("team_name", team_name).execute()
