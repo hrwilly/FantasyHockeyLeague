@@ -196,10 +196,10 @@ def save_weekly_matchups(week_matchups: pd.DataFrame, week_num):
     records = upload_df.to_dict(orient="records")
 
     # --- Delete any existing records for that week (to prevent duplicates) ---
-    supabase.table("Matchups").delete().eq("week", week_num).execute()
+    supabase.table("matchups").delete().eq("week", week_num).execute()
 
     # --- Insert new records ---
-    supabase.table("Matchups").insert(records).execute()
+    supabase.table("matchups").insert(records).execute()
 
 def update_team_record(team_name, W=None, L=None, PF=None, PA=None):
     """Update individual team record values in Supabase."""
