@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import db_utils
 
-st.title("Standings")
+st.title("🏆 Standings")
 
 standings = db_utils.load_teams()
 
