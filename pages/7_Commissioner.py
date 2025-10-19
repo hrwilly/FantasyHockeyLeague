@@ -99,7 +99,7 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
     db_utils.save_last_week_stats(current_cum)
     st.success(f"✅ Weekly scoring saved for Week {st.session_state.selected_week}, Day {st.session_state.selected_day},")
 
-if st.button('Run Matchups'):
+if st.button('🏁 Run Matchups'):
     matchups_df = db_utils.load_matchups()
     managers = db_utils.load_teams()
     rosters_df = db_utils.load_roster()
@@ -217,3 +217,19 @@ if 'weekly_matchups' in st.session_state and st.button('💾 Save Matchup Result
         )
 
     st.success(f"✅ Week {selected_week} processed successfully!")
+
+if st.button('🏁 Run off-week'):
+
+    coll_teams = get_team_names()
+    current_cum = pd.DataFrame()
+
+    for team in coll_teams.Name:
+        try:
+            team_points = get_current_data(team[:-1])
+            current_cum = pd.concat([current_cum, team_points])
+        except Exception as e:
+            st.warning(f"Skipping team {team[:-1]}: {e}")
+
+    db_utils.save_last_week_stats(current_cum)
+
+    st.success(f"✅ Updated stats between weeks.")
