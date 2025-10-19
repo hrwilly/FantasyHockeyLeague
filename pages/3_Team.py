@@ -31,12 +31,13 @@ else:
 points = db_utils.load_points()
 weekly = points[points['Week'] == max(points['Week'])][['Name', 'team', 'FantasyPoints', 'Week']]
 weekly_total = weekly.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
-weekly_total['WeeklyPts'] = round(weekly_total.sum(axis=1), 1)
+weekly_total['WeeklyPts'] = weekly_total.sum(axis=1)
 total = points.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
-total['CumulativePts'] = round(total.sum(axis=1), 1)
+total['CumulativePts'] = total.sum(axis=1)
 total = total.reset_index()[['Name','team','CumulativePts']]
 players = pd.merge(players, weekly_total, on=['Name','team'], how='left')
 players = pd.merge(players, total, on=['Name','team'], how='left')
+players = round(players, 1)
 st.session_state.players = players
 
 # --- Select your team ---
