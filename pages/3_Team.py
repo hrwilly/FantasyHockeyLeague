@@ -95,7 +95,7 @@ st.session_state.bench = st.session_state.roster[st.session_state.roster["Pos."]
 # --- Display roster ---
 st.subheader(f"{selected_team}'s Roster")
 roster_placeholder = st.empty()
-roster_placeholder.table(st.session_state.roster.style.format({"WeeklyPts": "{:.1f}", "CumulativePts": "{:.1f}"})))
+roster_placeholder.table(st.session_state.roster.style.format({"WeeklyPts": "{:.1f}", "CumulativePts": "{:.1f}"}))
 
 # --- Week selection ---
 weeks = list(range(2, 16))
