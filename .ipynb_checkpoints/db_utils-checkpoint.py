@@ -205,13 +205,13 @@ def update_team_record(team_name, W=None, L=None, PF=None, PA=None):
     """Update individual team record values in Supabase."""
     updates = {}
     if W is not None:
-        updates["W"] = W
+        updates["W"] = int(W)
     if L is not None:
-        updates["L"] = L
+        updates["L"] = int(L)
     if PF is not None:
-        updates["PF"] = PF
+        updates["PF"] = float(PF)
     if PA is not None:
-        updates["PA"] = PA
+        updates["PA"] = float(PA)
 
     if updates:
         supabase.table("teams").update(updates).eq("team_name", team_name).execute()
