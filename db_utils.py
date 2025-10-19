@@ -213,7 +213,7 @@ def update_team_record(team_name, W=None, L=None, PF=None, PA=None, Place=None):
     if PA is not None:
         updates["PA"] = float(PA)
     if Place is not None:
-        updates["Place"] = int(PA)
+        updates["Place"] = int(Place)
 
     if updates:
         supabase.table("teams").update(updates).eq("team_name", team_name).execute()

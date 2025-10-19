@@ -53,7 +53,7 @@ def compute_fantasy_points(data):
 
 selected_week = st.selectbox("Select week", list(range(1, 16)))
 st.session_state['selected_week'] = selected_week
-selected_day = st.selectbox("Select day", list(range(1, 6)))
+selected_day = st.selectbox("Select day", list(range(1, 5)))
 st.session_state['selected_day'] = selected_day
 
 # --- Run Weekly Scoring ---
