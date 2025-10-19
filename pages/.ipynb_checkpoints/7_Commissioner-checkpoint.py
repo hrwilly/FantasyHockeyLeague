@@ -157,4 +157,4 @@ if st.button('Run Matchups'):
     db_utils.save_weekly_matchups(week_matchups, selected_week)
     st.success(f"✅ Weekly matchup scores saved for Week {st.session_state.selected_week}")
 
-    st.dataframe(week_matchups)
+    st.dataframe(week_matchups[['week', 'home_team', 'away_team', 'home_team_points', 'away_team_points']], hide_index = True)
