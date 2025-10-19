@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
+import db_utils
 
 st.title("Weekly Fantasy Points & Standings")
 
-st.write("Standings coming soon!")
+standings = db_utils.load_teams()
+
+st.dataframe(standings, hide_index = True)
