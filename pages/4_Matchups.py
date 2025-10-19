@@ -58,7 +58,7 @@ for idx, row in week_matchups.iterrows():
     week_matchups.loc[idx, "home_team_points"] = round(home_points, 1)
     week_matchups.loc[idx, "away_team_points"] = round(away_points, 1)
 
-st.dataframe(week_matchups.set_index('week').drop(['manager_1', 'manager_2'], axis = 1))
+st.dataframe(week_matchups.set_index('week').drop(['manager_1', 'manager_2'], axis = 1)[['home_team', 'away_team', 'home_team_points', 'away_team_points']])
 
 weeks = sorted(matchups_df["week"].unique())
 
