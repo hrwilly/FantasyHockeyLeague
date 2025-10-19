@@ -198,8 +198,18 @@ if 'weekly_matchups' in st.session_state and st.button('💾 Save Matchup Result
             away_W += 1
             home_L += 1
 
-        # Push updates back to Supabase
-        db_utils.update_team_record(home_team, W=home_W, L=home_L, PF=home_PF, PA=home_PA)
-        db_utils.update_team_record(away_team, W=away_W, L=away_L, PF=away_PF, PA=away_PA)
+    teams_df = teams_df.sort_values(by=["W", "L", "PF"], ascending=[False, True, False]).reset_index(drop=True)
+    teams_df["Place"] = range(1, len(teams_df) + 1)
+
+    # --- Push all team updates once ---
+    for _, row in teams_df.iterrows():
+        db_utils.update_team_record(
+            row["team_name"],
+            W=int(row["W"]),
+            L=int(row["L"]),
+            PF=float(row["PF"]),
+            PA=float(row["PA"]),
+            Place=int(row["Place"])
+        )
 
     st.success(f"✅ Week {selected_week} processed successfully!")
