@@ -91,7 +91,19 @@ if st.button("🏁 Run Weekly Scoring"):
 
     last_week = db_utils.load_last_week_stats()
     last_week = last_week.set_index(['Name', 'team'])
-    weekly_stats = (current_cum - last_week).fillna(0.0)
+
+    # Align both frames by index
+    current_cum, last_week = current_cum.align(last_week, join='outer', fill_value=0)
+    
+    # Identify new players (appear in current but not last)
+    new_players = current_cum.index.difference(last_week.index)
+    
+    # Compute weekly stats normally
+    weekly_stats = current_cum - last_week
+    
+    # For new players, use their full current stats instead of zero
+    weekly_stats.loc[new_players] = current_cum.loc[new_players]
+    weekly_stats = weekly_stats[(weekly_stats != 0).any(axis=1)]
 
     weekly_scored = compute_fantasy_points(weekly_stats)
 
