@@ -6,4 +6,4 @@ st.title("🏆 Standings")
 
 standings = db_utils.load_teams()
 
-st.dataframe(standings[['Place', 'team_name', 'manager', 'W', 'L', 'PF', 'PA']], hide_index = True, height = 460)
+st.dataframe(standings.sort_values('Place')[['Place', 'team_name', 'manager', 'W', 'L', 'PF', 'PA']], hide_index = True, height = 460)
