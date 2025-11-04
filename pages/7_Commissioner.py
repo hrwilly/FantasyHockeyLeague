@@ -90,6 +90,7 @@ if st.button("🏁 Run Weekly Scoring"):
             st.warning(f"Skipping team {team[:-1]}: {e}")
 
     last_week = db_utils.load_last_week_stats()
+    st.dataframe(last_week)
     weekly_stats = (current_cum - last_week).fillna(0.0)
 
     weekly_scored = compute_fantasy_points(weekly_stats)
