@@ -25,9 +25,28 @@ def get_current_data(team):
     
     offense[['Name', 'Pos.', 'Yr']] = offense['Name, Yr'].str.split(',', expand=True)
     goalies[['Name', 'Yr']] = goalies['Name, Yr'].str.split(',', expand=True)
+
+    # Merge by Name and Yr only (not GP)
+    points = pd.merge(offense, goalies, on=['Name', 'Yr'], how='outer', suffixes=('_off', '_goal'))
     
-    points = pd.merge(offense, goalies, on = ['Name', 'Yr', 'GP'], how = 'outer')
-    points = points.drop(['Name, Yr_x', 'Name, Yr_y'], axis = 1)
+    # Prefer non-null GP values (goalie GP often more accurate)
+    points['GP'] = points['GP_off'].fillna(points['GP_goal'])
+    
+    # Drop duplicate GP columns
+    points = points.drop(columns=['GP_off', 'GP_goal'], errors='ignore')
+    
+    # If any numeric columns appear in both tables, fill offense stats with goalie stats where missing
+    for col in ['G', 'A', 'Shots', 'PIM', 'GWG', 'PPG', 'SHG', '+/-', 'FOW', 'FOL', 'BLK', 'W', 'GA', 'SV', 'SO']:
+        if f"{col}_off" in points.columns and f"{col}_goal" in points.columns:
+            points[col] = points[f"{col}_off"].fillna(points[f"{col}_goal"])
+        elif f"{col}_off" in points.columns:
+            points[col] = points[f"{col}_off"]
+        elif f"{col}_goal" in points.columns:
+            points[col] = points[f"{col}_goal"]
+    
+    # Clean up suffix columns
+    points = points.drop(columns=[c for c in points.columns if c.endswith('_off') or c.endswith('_goal')], errors='ignore')
+    
     points['team'] = team
     points = points.set_index(['Name', 'team'])
 
@@ -81,8 +100,8 @@ if st.button("🏁 Run Weekly Scoring"):
     st.session_state['current_cum'] = current_cum
 
     st.success(f"✅ Weekly scoring calculated for Week {st.session_state.selected_week}")
-    st.dataframe(weekly_scored.head(50))
-    st.dataframe(current_cum.head(50))
+    st.dataframe(weekly_scored)
+    st.dataframe(current_cum)
 
 # --- Save Weekly Scoring ---
 if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
@@ -97,7 +116,7 @@ if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
 
     db_utils.save_weekly_points(points, st.session_state.selected_week, st.session_state.selected_day)
     db_utils.save_last_week_stats(current_cum)
-    st.success(f"✅ Weekly scoring saved for Week {st.session_state.selected_week}, Day {st.session_state.selected_day},")
+    st.success(f"✅ Weekly scoring saved for Week {st.session_state.selected_week}, Day {st.session_state.selected_day}.")
 
 if st.button('🏁 Run Matchups'):
     matchups_df = db_utils.load_matchups()
