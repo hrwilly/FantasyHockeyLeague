@@ -1,4 +1,4 @@
-import streamlit as st
+'''import streamlit as st
 import pandas as pd
 import db_utils
 from streamlit_autorefresh import st_autorefresh
@@ -175,4 +175,4 @@ if not draft_board.empty:
         width='stretch'
     )
 else:
-    st.info("No players have been drafted yet.")
+    st.info("No players have been drafted yet.")'''
