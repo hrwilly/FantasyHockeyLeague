@@ -1,4 +1,4 @@
-'''import streamlit as st
+import streamlit as st
 import db_utils
 
 st.title("📋 Register Your Team")
@@ -18,4 +18,3 @@ if st.button("Register"):
             db_utils.add_team(team_name, manager)
             st.success(f"✅ Team **{team_name}** registered successfully!")
 
-'''
