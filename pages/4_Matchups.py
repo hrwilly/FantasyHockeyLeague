@@ -65,7 +65,7 @@ st.dataframe(week_matchups.set_index('week').drop(['manager_1', 'manager_2'], ax
 weeks = sorted(matchups_df["week"].unique())
 
 # --- Create matchup labels like 'Team1 vs Team2' ---
-week_matchups["matchup_label"] = week_matchups.apply(
+week_matchups.loc[:, "matchup_label"] = week_matchups.apply(
     lambda row: f"{row['home_team']} vs {row['away_team']}", axis=1
 )
 
