@@ -179,8 +179,26 @@ def submit_roster(all_rows):
     supabase.table("active_roster").insert(all_rows).execute()
 
 def load_roster():
-    data = supabase.table("active_roster").select("*").range(0, 999999).execute().data
-    return pd.DataFrame(data)
+    table = supabase.table("active_roster")
+    page_size = 1000
+    start = 0
+    all_rows = []
+
+    while True:
+        resp = table.select("*").range(start, start + page_size - 1).execute()
+        batch = resp.data
+
+        if not batch:
+            break
+
+        all_rows.extend(batch)
+        start += page_size
+
+        # Stop when fewer than page_size rows are returned
+        if len(batch) < page_size:
+            break
+
+    return pd.DataFrame(all_rows)
 
 def save_weekly_matchups(week_matchups: pd.DataFrame, week_num):
     """
