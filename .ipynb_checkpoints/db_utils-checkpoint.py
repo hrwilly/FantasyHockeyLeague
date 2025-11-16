@@ -178,34 +178,9 @@ def delete_prev_roster(team_name, selected_week):
 def submit_roster(all_rows):
     supabase.table("active_roster").insert(all_rows).execute()
 
-def load_roster(batch_size=100, max_retries=3, delay=2):
-    start = 0
-    end = batch_size - 1
-    all_rows = []
-
-    while True:
-        try:
-            for attempt in range(max_retries):
-                try:
-                    response = supabase.table("active_roster").select("*").execute().data
-                    rows = response.data
-                    break  # Success: exit retry loop
-                except ReadError as e:
-                    time.sleep(delay)
-            else:
-                break  # Break outer loop if all retries failed
-
-            if not rows:
-                break  # No more data
-
-            all_rows.extend(rows)
-            start += batch_size
-            end += batch_size
-
-        except Exception as e:
-            break
-
-    return pd.DataFrame(all_rows)
+def load_roster():
+    data = supabase.table("active_roster").select("*").range(0, 999999).execute().data
+    return pd.DataFrame(data)
 
 def save_weekly_matchups(week_matchups: pd.DataFrame, week_num):
     """
