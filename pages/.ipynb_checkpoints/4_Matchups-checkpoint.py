@@ -16,7 +16,7 @@ matchups_df = (
     )
 
 selected_week = st.selectbox("Select week", sorted(matchups_df["week"].unique()))
-week_matchups = matchups_df[matchups_df["week"] == selected_week]
+week_matchups = matchups_df[matchups_df["week"] == selected_week].copy()
 week_rosters = rosters_df[rosters_df['week'] == selected_week]
 week_points = points[points['Week'] == selected_week]
 
