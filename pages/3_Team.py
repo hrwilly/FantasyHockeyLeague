@@ -96,7 +96,7 @@ roster_placeholder = st.empty()
 roster_placeholder.table(st.session_state.roster.style.format({"WeeklyPts": "{:.1f}", "CumulativePts": "{:.1f}"}, na_rep = '0'))
 
 # --- Week selection ---
-weeks = list(range(8, 17))
+weeks = list(range(9, 17))
 selected_week = st.selectbox("Select Week", weeks)
 
 # --- Submit Players ---
