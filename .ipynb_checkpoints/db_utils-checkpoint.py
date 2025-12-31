@@ -319,3 +319,49 @@ def add_drop_player(
         "team": add_player_team
     }).execute()
 
+def load_players_for_team(team_name: str, batch_size=500, max_retries=3, delay=1):
+    """
+    Loads only players owned by a single fantasy team (players.held_by == team_name).
+    Uses pagination for safety but the result set should be small.
+    """
+    start = 0
+    end = batch_size - 1
+    all_rows = []
+
+    while True:
+        rows = None
+
+        for attempt in range(max_retries):
+            try:
+                resp = (
+                    supabase
+                    .table("players")
+                    .select("*")
+                    .eq("held_by", team_name)
+                    .range(start, end)
+                    .execute()
+                )
+                rows = resp.data
+                break
+            except ReadError:
+                time.sleep(delay)
+
+        # If request never succeeded, stop
+        if rows is None:
+            break
+
+        if not rows:
+            break
+
+        all_rows.extend(rows)
+
+        # advance pagination
+        start += batch_size
+        end += batch_size
+
+        # stop if last page
+        if len(rows) < batch_size:
+            break
+
+    return pd.DataFrame(all_rows)
+
