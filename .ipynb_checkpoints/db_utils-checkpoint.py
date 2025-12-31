@@ -896,3 +896,140 @@ def execute_trade_balanced(trade_id: str, drops_by_team: dict, pickups_by_team: 
     _rebuild_lineup_state_fixed(team_a)
     _rebuild_lineup_state_fixed(team_b)
 
+
+def get_trade(trade_id: str):
+    return supabase.table("trades").select("*").eq("id", trade_id).execute().data[0]
+
+
+def save_finalize_moves(trade_id: str, team_role: str, drops: list[dict], pickups: list[dict]):
+    """
+    team_role: "recipient" or "proposer"
+    drops/pickups: [{"Name": "...", "team": "..."}, ...]
+    """
+    payload = {"drops": drops or [], "pickups": pickups or []}
+
+    if team_role == "recipient":
+        supabase.table("trades").update({
+            "recipient_moves": payload,
+            "recipient_finalized": True,
+            "updated_at": datetime.utcnow().isoformat(),
+        }).eq("id", trade_id).execute()
+    elif team_role == "proposer":
+        supabase.table("trades").update({
+            "proposer_moves": payload,
+            "proposer_finalized": True,
+            "updated_at": datetime.utcnow().isoformat(),
+        }).eq("id", trade_id).execute()
+    else:
+        raise ValueError("team_role must be 'recipient' or 'proposer'")
+
+
+def load_finalize_moves(trade_row: dict):
+    rec = trade_row.get("recipient_moves") or {"drops": [], "pickups": []}
+    pro = trade_row.get("proposer_moves") or {"drops": [], "pickups": []}
+    return rec, pro
+
+
+ROSTER_TOTAL = 17
+
+def compute_trade_needs(trade_id: str):
+    trade = get_trade(trade_id)
+    items = load_trade_players(trade_id)
+
+    teams = [trade["proposer_team"], trade["recipient_team"]]
+    out = {}
+
+    for tname in teams:
+        # current roster count
+        cnt = supabase.table("players").select("Name", count="exact").eq("held_by", tname).execute().count
+        incoming = int((items["to_team"] == tname).sum())
+        outgoing = int((items["from_team"] == tname).sum())
+        post_count = int(cnt) + incoming - outgoing
+
+        required_drops = max(0, post_count - ROSTER_TOTAL)
+        open_slots = max(0, ROSTER_TOTAL - post_count)
+
+        out[tname] = {"post_count": post_count, "required_drops": required_drops, "open_slots": open_slots}
+
+    return out
+
+
+def start_finalize(trade_id: str, actor_team: str):
+    trade = get_trade(trade_id)
+    if trade["status"] != "PROPOSED":
+        raise ValueError("Trade is not PROPOSED.")
+    if actor_team != trade["recipient_team"]:
+        raise ValueError("Only the recipient can accept/start finalize.")
+
+    supabase.table("trades").update({
+        "status": "FINALIZE_RECIPIENT",
+        "recipient_finalized": False,
+        "proposer_finalized": False,
+        "recipient_moves": None,
+        "proposer_moves": None,
+        "updated_at": datetime.utcnow().isoformat(),
+        "last_action_by": actor_team,
+        "last_action_at": datetime.utcnow().isoformat(),
+    }).eq("id", trade_id).execute()
+
+
+def submit_finalize_step(trade_id: str, actor_team: str, drops: list[dict], pickups: list[dict]):
+    trade = get_trade(trade_id)
+    proposer = trade["proposer_team"]
+    recipient = trade["recipient_team"]
+
+    needs = compute_trade_needs(trade_id)
+
+    if actor_team == recipient:
+        role = "recipient"
+        required = needs[recipient]["required_drops"]
+        open_slots = needs[recipient]["open_slots"]
+        if trade["status"] != "FINALIZE_RECIPIENT":
+            raise ValueError("Trade is not waiting on recipient finalize.")
+    elif actor_team == proposer:
+        role = "proposer"
+        required = needs[proposer]["required_drops"]
+        open_slots = needs[proposer]["open_slots"]
+        if trade["status"] != "FINALIZE_PROPOSER":
+            raise ValueError("Trade is not waiting on proposer finalize.")
+    else:
+        raise ValueError("You are not part of this trade.")
+
+    if len(drops) != required:
+        raise ValueError(f"{actor_team} must drop exactly {required} player(s).")
+    if len(pickups) > open_slots:
+        raise ValueError(f"{actor_team} can pick up at most {open_slots} player(s).")
+
+    save_finalize_moves(trade_id, role, drops, pickups)
+
+    # Advance or execute
+    trade = get_trade(trade_id)  # refresh
+    rec_moves, pro_moves = load_finalize_moves(trade)
+
+    if trade["status"] == "FINALIZE_RECIPIENT":
+        supabase.table("trades").update({
+            "status": "FINALIZE_PROPOSER",
+            "updated_at": datetime.utcnow().isoformat(),
+            "last_action_by": actor_team,
+            "last_action_at": datetime.utcnow().isoformat(),
+        }).eq("id", trade_id).execute()
+        return "WAITING_ON_PROPOSER"
+
+    if trade["status"] == "FINALIZE_PROPOSER":
+        # Both sides now have moves stored on the trade row -> execute once
+        execute_trade_balanced(
+            trade_id,
+            drops_by_team={
+                recipient: rec_moves.get("drops", []),
+                proposer: pro_moves.get("drops", []),
+            },
+            pickups_by_team={
+                recipient: rec_moves.get("pickups", []),
+                proposer: pro_moves.get("pickups", []),
+            },
+        )
+        set_trade_status(trade_id, "ACCEPTED", actor_team=actor_team)
+        return "EXECUTED"
+
+    raise ValueError("Unexpected trade status during finalize.")
+
