@@ -795,13 +795,38 @@ for _, t in trades_df.iterrows():
         # -----------------------
         if status == "PROPOSED":
             if is_recipient_viewing:
-                if a1.button("✅ Accept (Start Finalize)", key=f"start_finalize_{trade_id}"):
+                if a1.button("✅ Accept", key=f"accept_{trade_id}"):
                     try:
-                        start_finalize(trade_id, viewer_team)
-                        clear_ui_caches()
-                        st.rerun()
+                        # If even trade with no roster balancing required, execute immediately
+                        needs = compute_trade_needs(trade_id)
+                
+                        need_pro = needs[proposer]
+                        need_rec = needs[recipient]
+                
+                        no_balancing_needed = (
+                            need_pro["required_drops"] == 0 and need_rec["required_drops"] == 0
+                            and need_pro["open_slots"] == 0 and need_rec["open_slots"] == 0
+                        )
+                
+                        if no_balancing_needed:
+                            execute_trade_balanced(
+                                trade_id,
+                                drops_by_team={proposer: [], recipient: []},
+                                pickups_by_team={proposer: [], recipient: []},
+                            )
+                            set_trade_status(trade_id, "ACCEPTED", actor_team=viewer_team)
+                            clear_ui_caches()
+                            st.success("Trade accepted and executed (no balancing needed).")
+                            st.rerun()
+                        else:
+                            # Uneven / roster balancing needed -> start the 2-step finalize flow
+                            start_finalize(trade_id, viewer_team)
+                            clear_ui_caches()
+                            st.rerun()
+                
                     except Exception as e:
                         st.error(str(e))
+
 
                 if a2.button("❌ Decline", key=f"decline_{trade_id}"):
                     try:
