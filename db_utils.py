@@ -460,7 +460,128 @@ def set_trade_status(trade_id: str, status: str, actor_team: str):
     supabase.table("trades").update(updates).eq("id", trade_id).execute()
 
 
+def _pos_group(pos_val: str) -> str:
+    """
+    Normalize player positions into groups for lineup integrity.
+    Adjust if your Pos. values differ.
+    """
+    if not pos_val:
+        return "F"
+    p = str(pos_val).upper()
+    if "G" in p:
+        return "G"
+    if "D" in p:
+        return "D"
+    return "F"
+
+
+def _get_lineup_shape(team_name: str):
+    """
+    Returns (starter_total, starters_by_group) based on CURRENT lineup_state.
+    """
+    rows = supabase.table("lineup_state").select("*").eq("team_name", team_name).execute().data or []
+    starter_rows = [r for r in rows if r.get("player_pos") == "starter"]
+
+    starter_total = len(starter_rows)
+    starters_by_group = {}
+    for r in starter_rows:
+        g = _pos_group(r.get("Pos."))
+        starters_by_group[g] = starters_by_group.get(g, 0) + 1
+
+    return starter_total, starters_by_group
+
+
+def _fetch_roster_for_team(team_name: str):
+    """
+    Fetch current roster from players table. Must include Name, team, Pos.
+    Uses select('*') to avoid the Pos. select parsing issue.
+    """
+    roster = supabase.table("players").select("*").eq("held_by", team_name).execute().data or []
+    # normalize expected fields
+    out = []
+    for r in roster:
+        out.append({
+            "Name": r.get("Name"),
+            "team": r.get("team"),
+            "Pos.": r.get("Pos."),
+        })
+    # remove any weird nulls
+    out = [r for r in out if r["Name"] and r["team"]]
+    return out
+
+
+def _rebuild_lineup_state_to_shape(team_name: str, starter_total: int, starters_by_group: dict):
+    """
+    Rebuild lineup_state for team_name so starters match starter_total and starters_by_group.
+    Keeps existing starters where possible.
+    """
+    # Current lineup_state (for "keep starters" preference)
+    current = supabase.table("lineup_state").select("*").eq("team_name", team_name).execute().data or []
+    current_pos_by_name = {r["player_name"]: r.get("player_pos", "bench") for r in current if r.get("player_name")}
+
+    # Current roster after trade
+    roster = _fetch_roster_for_team(team_name)
+    if not roster:
+        # If team somehow has no players, clear lineup_state
+        supabase.table("lineup_state").delete().eq("team_name", team_name).execute()
+        return
+
+    # Build pools by group
+    by_group = {"F": [], "D": [], "G": []}
+    for p in roster:
+        g = _pos_group(p.get("Pos."))
+        by_group.setdefault(g, []).append(p)
+
+    # Prefer to keep people who were already starters
+    for g in by_group:
+        by_group[g].sort(key=lambda x: (current_pos_by_name.get(x["Name"]) != "starter", x["Name"]))
+
+    # Pick starters per group to match previous shape
+    starters = []
+    remaining = set((p["Name"], p["team"]) for p in roster)
+
+    for g, need in starters_by_group.items():
+        pool = by_group.get(g, [])
+        take = pool[: max(0, int(need))]
+        for p in take:
+            starters.append(p)
+            remaining.discard((p["Name"], p["team"]))
+
+    # If we still need more starters (e.g., shape didn’t cover all starter slots),
+    # fill with best available (prefer existing starters; else alphabetical).
+    if len(starters) < starter_total:
+        remaining_list = [p for p in roster if (p["Name"], p["team"]) in remaining]
+        remaining_list.sort(key=lambda x: (current_pos_by_name.get(x["Name"]) != "starter", x["Name"]))
+        needed = starter_total - len(starters)
+        starters.extend(remaining_list[:needed])
+        for p in remaining_list[:needed]:
+            remaining.discard((p["Name"], p["team"]))
+
+    starter_set = set((p["Name"], p["team"]) for p in starters)
+
+    # Rebuild ALL rows (simple + consistent). This guarantees Pos. and team are correct.
+    new_rows = []
+    for p in roster:
+        is_starter = (p["Name"], p["team"]) in starter_set
+        new_rows.append({
+            "team_name": team_name,
+            "player_name": p["Name"],
+            "player_pos": "starter" if is_starter else "bench",
+            "Pos.": p.get("Pos."),
+            "team": p.get("team"),
+        })
+
+    # Replace lineup_state for this team (safe if lineup_state only stores lineup info)
+    supabase.table("lineup_state").delete().eq("team_name", team_name).execute()
+    supabase.table("lineup_state").insert(new_rows).execute()
+
+
 def execute_trade(trade_id: str):
+    """
+    Execute trade and keep lineup_state integrity:
+      - preserve each team's starter counts + starter-by-group counts from before trade
+      - rebuild lineup_state after ownership changes
+    """
     trade = supabase.table("trades").select("*").eq("id", trade_id).execute().data[0]
     if trade["status"] != "PROPOSED":
         raise ValueError(f"Trade is not PROPOSED (status={trade['status']}).")
@@ -469,7 +590,14 @@ def execute_trade(trade_id: str):
     if items.empty:
         raise ValueError("Trade has no players.")
 
-    # 1) Verify ownership
+    team_a = trade["proposer_team"]
+    team_b = trade["recipient_team"]
+
+    # 1) Snapshot lineup shapes BEFORE trade
+    a_starter_total, a_by_group = _get_lineup_shape(team_a)
+    b_starter_total, b_by_group = _get_lineup_shape(team_b)
+
+    # 2) Verify ownership
     problems = []
     for _, row in items.iterrows():
         name = row["player_name"]
@@ -495,54 +623,15 @@ def execute_trade(trade_id: str):
     if problems:
         raise ValueError("Cannot execute trade:\n- " + "\n- ".join(problems))
 
-    # 2) Apply ownership swaps + keep lineup_state consistent (INCLUDING Pos. + team)
+    # 3) Apply ownership swaps
     for _, row in items.iterrows():
-        name = row["player_name"]
-        pteam = row["player_team"]
-        from_team = row["from_team"]
-        to_team = row["to_team"]
-
-        # Fetch player row so we can get Pos. safely (avoid select("Pos."))
-        prec = (
-            supabase.table("players")
-            .select("*")
-            .eq("Name", name)
-            .eq("team", pteam)
-            .execute()
-            .data
-        )
-        pos_val = prec[0].get("Pos.") if prec else None
-
-        # Update ownership
         supabase.table("players").update(
-            {"held_by": to_team}
-        ).eq("Name", name).eq("team", pteam).execute()
+            {"held_by": row["to_team"]}
+        ).eq("Name", row["player_name"]).eq("team", row["player_team"]).execute()
 
-        # Preserve starter/bench if exists on old team
-        existing_ls = (
-            supabase.table("lineup_state")
-            .select("*")
-            .eq("team_name", from_team)
-            .eq("player_name", name)
-            .execute()
-            .data
-        )
-        player_pos = existing_ls[0].get("player_pos") if existing_ls else "bench"
-
-        # Remove from old team lineup_state
-        supabase.table("lineup_state").delete() \
-            .eq("team_name", from_team) \
-            .eq("player_name", name) \
-            .execute()
-
-        # Add to new team lineup_state (write ALL needed columns)
-        supabase.table("lineup_state").upsert({
-            "team_name": to_team,
-            "player_name": name,
-            "player_pos": player_pos,
-            "Pos.": pos_val,     # <-- this was missing
-            "team": pteam,       # <-- this was missing
-        }).execute()
+    # 4) Rebuild lineup_state for both teams to match their prior shapes
+    _rebuild_lineup_state_to_shape(team_a, a_starter_total, a_by_group)
+    _rebuild_lineup_state_to_shape(team_b, b_starter_total, b_by_group)
 
 
 def counter_trade(
