@@ -1,39 +1,4 @@
 # pages/6_Trades.py
-#
-# Fully functional Trade Center page (SELF-CONTAINED)
-# - Does NOT rely on db_utils for trading
-# - Preserves roster integrity via lineup_state rebuild after execution:
-#     Starters: 6F / 4D / 2G
-#     Bench: 5
-#     Total: 17
-# - Uneven trades supported
-# - Multi-step finalize when balancing is needed:
-#     Recipient finalizes first (drops required; pickups REQUIRED if under 17)
-#     Proposer finalizes second (drops required; pickups REQUIRED if under 17)
-#     Trade executes only after proposer submits
-# - Auto-finalizes (executes immediately) when no balancing needed for either team
-#   (i.e., both teams will be exactly 17 after trade: required_drops=0 and open_slots=0)
-#
-# DATABASE EXPECTATIONS (Supabase):
-# Tables:
-#   teams: team_name (text)
-#   players: Name (text), team (text), held_by (text nullable), "Pos." (text)
-#   trades:
-#     id (uuid), proposer_team (text), recipient_team (text), status (text),
-#     message (text nullable), parent_trade_id (uuid nullable), created_at, updated_at,
-#     last_action_by (text nullable), last_action_at (timestamptz nullable),
-#     recipient_moves (jsonb nullable), proposer_moves (jsonb nullable),
-#     recipient_finalized (bool), proposer_finalized (bool)
-#   trade_players:
-#     trade_id (uuid), from_team (text), to_team (text),
-#     player_name (text), player_team (text)
-#   lineup_state:
-#     team_name (text), player_name (text), player_pos (text 'starter'/'bench'),
-#     "Pos." (text), team (text)
-#
-# IMPORTANT NOTE about "Pos.": PostgREST can choke if you do select("Pos.") due to the dot.
-# We always use select("*") when we need that field.
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -41,19 +6,19 @@ from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 import streamlit as st
-from supabase import create_client
+import db_utils  # <-- use your current db_utils
 
-
-# ===========================
-# PAGE CONFIG
-# ===========================
+# ======================================================
+# CONFIG
+# ======================================================
 st.set_page_config(page_title="Trade Center", page_icon="🔁", layout="wide")
 st.title("🔁 Trade Center")
 
+supabase = db_utils.supabase  # reuse the same client as the rest of your app
 
-# ===========================
+# ======================================================
 # ROSTER RULES
-# ===========================
+# ======================================================
 STARTERS_BY_GROUP = {"F": 6, "D": 4, "G": 2}
 ROSTER_TOTAL = 17
 STARTER_TOTAL = sum(STARTERS_BY_GROUP.values())  # 12
@@ -70,61 +35,42 @@ VALID_STATUSES = [
 ]
 
 
-# ===========================
-# SUPABASE
-# ===========================
-@st.cache_resource
-def sb():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
-
-
 def utc_iso() -> str:
     return datetime.utcnow().isoformat()
 
 
-# ===========================
-# CACHED LOADERS
-# ===========================
+# ======================================================
+# CACHED DATA PULLS (via db_utils)
+# ======================================================
 @st.cache_data(ttl=120, show_spinner=False)
 def load_teams_df() -> pd.DataFrame:
-    resp = sb().table("teams").select("*").execute()
-    return pd.DataFrame(resp.data or [])
+    return db_utils.load_teams()
 
 
 @st.cache_data(ttl=120, show_spinner=False)
 def load_players_df() -> pd.DataFrame:
-    resp = sb().table("players").select("*").execute()
-    return pd.DataFrame(resp.data or [])
+    return db_utils.load_players()
 
 
 @st.cache_data(ttl=120, show_spinner=False)
 def load_points_df() -> pd.DataFrame:
-    # Optional table; if it doesn't exist, we just return empty
     try:
-        resp = sb().table("points").select("*").execute()
-        return pd.DataFrame(resp.data or [])
+        return db_utils.load_points()
     except Exception:
         return pd.DataFrame()
 
 
 @st.cache_data(ttl=120, show_spinner=False)
 def load_last_week_stats_df() -> pd.DataFrame:
-    # Optional table; if it doesn't exist, we just return empty
     try:
-        resp = sb().table("last_week_stats").select("*").execute()
-        return pd.DataFrame(resp.data or [])
+        return db_utils.load_last_week_stats()
     except Exception:
         return pd.DataFrame()
 
 
 def build_players_display_df() -> pd.DataFrame:
     """
-    Display dataframe:
-    - all players columns
-    - merges last_week_stats (all columns)
-    - adds WeeklyPts + CumulativePts when points table exists
+    players + last_week_stats (all cols) + WeeklyPts/CumulativePts
     """
     players = load_players_df().copy()
     if players.empty:
@@ -137,9 +83,14 @@ def build_players_display_df() -> pd.DataFrame:
     pts = load_points_df()
     if not pts.empty and "Week" in pts.columns and "FantasyPoints" in pts.columns and set(["Name", "team"]).issubset(pts.columns):
         latest_week = pts["Week"].max()
+
         weekly = pts[pts["Week"] == latest_week][["Name", "team", "FantasyPoints"]].copy()
-        weekly_total = weekly.groupby(["Name", "team"], as_index=False)["FantasyPoints"].sum().rename(columns={"FantasyPoints": "WeeklyPts"})
-        cumulative = pts.groupby(["Name", "team"], as_index=False)["FantasyPoints"].sum().rename(columns={"FantasyPoints": "CumulativePts"})
+        weekly_total = weekly.groupby(["Name", "team"], as_index=False)["FantasyPoints"].sum()
+        weekly_total.rename(columns={"FantasyPoints": "WeeklyPts"}, inplace=True)
+
+        cumulative = pts.groupby(["Name", "team"], as_index=False)["FantasyPoints"].sum()
+        cumulative.rename(columns={"FantasyPoints": "CumulativePts"}, inplace=True)
+
         players = players.merge(weekly_total, on=["Name", "team"], how="left")
         players = players.merge(cumulative, on=["Name", "team"], how="left")
 
@@ -147,19 +98,25 @@ def build_players_display_df() -> pd.DataFrame:
         if c in players.columns:
             players[c] = pd.to_numeric(players[c], errors="coerce").fillna(0)
 
+    # Normalize held_by to avoid missing players due to whitespace/casing issues
+    if "held_by" in players.columns:
+        players["held_by_norm"] = players["held_by"].fillna("").astype(str).str.strip()
+    else:
+        players["held_by_norm"] = ""
+
     return players
 
 
-# ===========================
-# TRADE DB HELPERS
-# ===========================
+# ======================================================
+# TRADE TABLE OPERATIONS (self-contained here)
+# ======================================================
 def get_trade(trade_id: str) -> Dict[str, Any]:
-    return sb().table("trades").select("*").eq("id", trade_id).execute().data[0]
+    return supabase.table("trades").select("*").eq("id", trade_id).execute().data[0]
 
 
 def load_trades_for_team(team_name: str) -> pd.DataFrame:
     resp = (
-        sb()
+        supabase
         .table("trades")
         .select("*")
         .or_(f"proposer_team.eq.{team_name},recipient_team.eq.{team_name}")
@@ -170,14 +127,15 @@ def load_trades_for_team(team_name: str) -> pd.DataFrame:
 
 
 def load_trade_players(trade_id: str) -> pd.DataFrame:
-    resp = sb().table("trade_players").select("*").eq("trade_id", trade_id).execute()
+    resp = supabase.table("trade_players").select("*").eq("trade_id", trade_id).execute()
     return pd.DataFrame(resp.data or [])
 
 
 def set_trade_status(trade_id: str, status: str, actor_team: str):
     if status not in VALID_STATUSES:
         raise ValueError(f"Invalid status: {status}")
-    sb().table("trades").update(
+
+    supabase.table("trades").update(
         {
             "status": status,
             "last_action_by": actor_team,
@@ -189,20 +147,21 @@ def set_trade_status(trade_id: str, status: str, actor_team: str):
 
 def _safe_update_trade_finalize_fields(trade_id: str, patch: Dict[str, Any]):
     """
-    Raises a helpful error if finalize columns were not added to trades table.
+    Needs these columns on trades:
+      recipient_moves jsonb, proposer_moves jsonb
+      recipient_finalized bool, proposer_finalized bool
     """
     try:
-        sb().table("trades").update(patch).eq("id", trade_id).execute()
+        supabase.table("trades").update(patch).eq("id", trade_id).execute()
     except Exception as e:
         raise RuntimeError(
-            "Your trades table is missing finalize columns.\n\n"
-            "Run this in Supabase SQL editor:\n"
+            "Trades finalize columns missing. Run in Supabase SQL:\n\n"
             "alter table trades\n"
             "  add column if not exists recipient_moves jsonb,\n"
             "  add column if not exists proposer_moves jsonb,\n"
             "  add column if not exists recipient_finalized boolean not null default false,\n"
             "  add column if not exists proposer_finalized boolean not null default false;\n\n"
-            f"Original error: {e}"
+            f"Original error:\n{e}"
         )
 
 
@@ -228,7 +187,7 @@ def create_trade(
         "recipient_finalized": False,
         "proposer_finalized": False,
     }
-    resp = sb().table("trades").insert(trade_row).execute()
+    resp = supabase.table("trades").insert(trade_row).execute()
     trade_id = resp.data[0]["id"]
 
     items = []
@@ -254,7 +213,7 @@ def create_trade(
         )
 
     if items:
-        sb().table("trade_players").insert(items).execute()
+        supabase.table("trade_players").insert(items).execute()
 
     return trade_id
 
@@ -279,9 +238,9 @@ def counter_trade(
     )
 
 
-# ===========================
+# ======================================================
 # FINALIZE FLOW (JSON on trades row)
-# ===========================
+# ======================================================
 def start_finalize(trade_id: str, actor_team: str):
     trade = get_trade(trade_id)
     if trade["status"] != "PROPOSED":
@@ -308,25 +267,16 @@ def start_finalize(trade_id: str, actor_team: str):
 def save_finalize_moves(trade_id: str, role: str, drops: List[Dict[str, str]], pickups: List[Dict[str, str]]):
     payload = {"drops": drops or [], "pickups": pickups or []}
     now = utc_iso()
+
     if role == "recipient":
         _safe_update_trade_finalize_fields(
             trade_id,
-            {
-                "recipient_moves": payload,
-                "recipient_finalized": True,
-                "last_action_at": now,
-                "updated_at": now,
-            },
+            {"recipient_moves": payload, "recipient_finalized": True, "updated_at": now, "last_action_at": now},
         )
     elif role == "proposer":
         _safe_update_trade_finalize_fields(
             trade_id,
-            {
-                "proposer_moves": payload,
-                "proposer_finalized": True,
-                "last_action_at": now,
-                "updated_at": now,
-            },
+            {"proposer_moves": payload, "proposer_finalized": True, "updated_at": now, "last_action_at": now},
         )
     else:
         raise ValueError("role must be 'recipient' or 'proposer'")
@@ -338,9 +288,9 @@ def load_moves(trade_row: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any
     return rec, pro
 
 
-# ===========================
+# ======================================================
 # ROSTER / LINEUP INTEGRITY
-# ===========================
+# ======================================================
 def pos_group(pos_val: Any) -> str:
     if pos_val is None:
         return "F"
@@ -353,16 +303,15 @@ def pos_group(pos_val: Any) -> str:
 
 
 def count_roster(team_name: str) -> int:
-    data = sb().table("players").select("Name").eq("held_by", team_name).execute().data or []
+    data = supabase.table("players").select("Name").eq("held_by", team_name).execute().data or []
     return len(data)
 
 
 def compute_trade_needs(trade_id: str) -> Dict[str, Dict[str, int]]:
     """
-    For each team:
-      post_count = roster size after trade swap (before drops/picks)
-      required_drops = max(0, post_count - 17)
-      open_slots = max(0, 17 - post_count)  (REQUIRED pickups = open_slots)
+    post_count: after swap, before drops/picks
+    required_drops: max(0, post_count - 17)
+    open_slots: max(0, 17 - post_count)  -> REQUIRED pickups
     """
     trade = get_trade(trade_id)
     items = load_trade_players(trade_id)
@@ -377,19 +326,12 @@ def compute_trade_needs(trade_id: str) -> Dict[str, Dict[str, int]]:
         required_drops = max(0, post_count - ROSTER_TOTAL)
         open_slots = max(0, ROSTER_TOTAL - post_count)
 
-        out[team_name] = {
-            "post_count": int(post_count),
-            "required_drops": int(required_drops),
-            "open_slots": int(open_slots),
-        }
+        out[team_name] = {"post_count": int(post_count), "required_drops": int(required_drops), "open_slots": int(open_slots)}
     return out
 
 
 def simulate_post_trade_roster(players_df: pd.DataFrame, team_name: str, items_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Roster AFTER trade swap but BEFORE drops/picks (uses in-memory df for UI).
-    """
-    current = players_df[players_df["held_by"] == team_name].copy()
+    current = players_df[players_df["held_by_norm"] == team_name].copy()
 
     outgoing = items_df.loc[items_df["from_team"] == team_name, ["player_name", "player_team"]].copy()
     if not outgoing.empty and not current.empty:
@@ -411,16 +353,16 @@ def simulate_post_trade_roster(players_df: pd.DataFrame, team_name: str, items_d
 
 def rebuild_lineup_state_fixed(team_name: str):
     """
-    Rebuild lineup_state to fixed starters: 6F/4D/2G, rest bench.
+    Rebuild lineup_state to fixed starters 6F/4D/2G.
     Prefers keeping existing starters when possible.
-    Writes "Pos." and team fields from players table.
+    Also writes Pos. + team from players table.
     """
-    current_ls = sb().table("lineup_state").select("*").eq("team_name", team_name).execute().data or []
+    current_ls = supabase.table("lineup_state").select("*").eq("team_name", team_name).execute().data or []
     was_starter = {r.get("player_name"): (r.get("player_pos") == "starter") for r in current_ls}
 
-    roster = sb().table("players").select("*").eq("held_by", team_name).execute().data or []
+    roster = supabase.table("players").select("*").eq("held_by", team_name).execute().data or []
     if not roster:
-        sb().table("lineup_state").delete().eq("team_name", team_name).execute()
+        supabase.table("lineup_state").delete().eq("team_name", team_name).execute()
         return
 
     pools: Dict[str, List[Dict[str, Any]]] = {"F": [], "D": [], "G": []}
@@ -437,8 +379,7 @@ def rebuild_lineup_state_fixed(team_name: str):
 
     new_rows = []
     for p in roster:
-        nm = p.get("Name")
-        tm = p.get("team")
+        nm, tm = p.get("Name"), p.get("team")
         new_rows.append(
             {
                 "team_name": team_name,
@@ -449,19 +390,15 @@ def rebuild_lineup_state_fixed(team_name: str):
             }
         )
 
-    sb().table("lineup_state").delete().eq("team_name", team_name).execute()
-    sb().table("lineup_state").insert(new_rows).execute()
+    supabase.table("lineup_state").delete().eq("team_name", team_name).execute()
+    supabase.table("lineup_state").insert(new_rows).execute()
 
 
 def verify_trade_ownership(items_df: pd.DataFrame):
-    """
-    Ensures each traded player is still held_by the from_team.
-    """
     problems: List[str] = []
     for _, r in items_df.iterrows():
         rec = (
-            sb()
-            .table("players")
+            supabase.table("players")
             .select("Name, team, held_by")
             .eq("Name", r["player_name"])
             .eq("team", r["player_team"])
@@ -479,15 +416,7 @@ def verify_trade_ownership(items_df: pd.DataFrame):
         raise ValueError("Cannot execute trade:\n- " + "\n- ".join(problems))
 
 
-def execute_trade_balanced(
-    trade_id: str,
-    drops_by_team: Dict[str, List[Dict[str, str]]],
-    pickups_by_team: Dict[str, List[Dict[str, str]]],
-):
-    """
-    Executes trade swap + required drops + REQUIRED pickups (exact open_slots),
-    then rebuilds lineup_state for both teams.
-    """
+def execute_trade_balanced(trade_id: str, drops_by_team: Dict[str, List[Dict[str, str]]], pickups_by_team: Dict[str, List[Dict[str, str]]]):
     trade = get_trade(trade_id)
     proposer = trade["proposer_team"]
     recipient = trade["recipient_team"]
@@ -499,43 +428,42 @@ def execute_trade_balanced(
 
     needs = compute_trade_needs(trade_id)
 
-    # Validate required sizes
+    # validate: drops exact, pickups exact (open_slots)
     for team_name in [proposer, recipient]:
         req_drops = needs[team_name]["required_drops"]
-        req_picks = needs[team_name]["open_slots"]  # REQUIRED pickups if underfilled
+        req_picks = needs[team_name]["open_slots"]
         drops = drops_by_team.get(team_name, [])
         picks = pickups_by_team.get(team_name, [])
-
         if len(drops) != req_drops:
             raise ValueError(f"{team_name} must drop exactly {req_drops} player(s).")
         if len(picks) != req_picks:
             raise ValueError(f"{team_name} must pick up exactly {req_picks} free agent(s).")
 
-    # 1) Swap ownership
+    # 1) swap ownership
     for _, r in items.iterrows():
-        sb().table("players").update({"held_by": r["to_team"]}).eq("Name", r["player_name"]).eq("team", r["player_team"]).execute()
+        supabase.table("players").update({"held_by": r["to_team"]}).eq("Name", r["player_name"]).eq("team", r["player_team"]).execute()
 
-    # 2) Drops
+    # 2) apply drops
     for team_name, drops in drops_by_team.items():
         for p in drops:
-            sb().table("players").update({"held_by": None}).eq("Name", p["Name"]).eq("team", p["team"]).execute()
-            sb().table("lineup_state").delete().eq("team_name", team_name).eq("player_name", p["Name"]).execute()
+            supabase.table("players").update({"held_by": None}).eq("Name", p["Name"]).eq("team", p["team"]).execute()
+            supabase.table("lineup_state").delete().eq("team_name", team_name).eq("player_name", p["Name"]).execute()
 
-    # 3) Pickups (must be free agents)
+    # 3) apply pickups (must be free agents)
     for team_name, picks in pickups_by_team.items():
         for p in picks:
-            held = sb().table("players").select("held_by").eq("Name", p["Name"]).eq("team", p["team"]).execute().data
+            held = supabase.table("players").select("held_by").eq("Name", p["Name"]).eq("team", p["team"]).execute().data
             if not held:
                 raise ValueError(f'Pickup player not found: {p["Name"]} ({p["team"]})')
             if held[0].get("held_by") is not None:
                 raise ValueError(f'Pickup not available (already owned): {p["Name"]} ({p["team"]})')
 
-            sb().table("players").update({"held_by": team_name}).eq("Name", p["Name"]).eq("team", p["team"]).execute()
+            supabase.table("players").update({"held_by": team_name}).eq("Name", p["Name"]).eq("team", p["team"]).execute()
 
-            # Keep lineup_state in sync immediately; rebuild will finalize starters/bench
-            prec = sb().table("players").select("*").eq("Name", p["Name"]).eq("team", p["team"]).execute().data
+            # upsert as bench (rebuild fixes starters/bench)
+            prec = supabase.table("players").select("*").eq("Name", p["Name"]).eq("team", p["team"]).execute().data
             pos_val = prec[0].get("Pos.") if prec else None
-            sb().table("lineup_state").upsert(
+            supabase.table("lineup_state").upsert(
                 {
                     "team_name": team_name,
                     "player_name": p["Name"],
@@ -545,17 +473,12 @@ def execute_trade_balanced(
                 }
             ).execute()
 
-    # 4) Rebuild lineup_state for integrity (also rewrites Pos./team)
+    # 4) rebuild lineup_state for integrity
     rebuild_lineup_state_fixed(proposer)
     rebuild_lineup_state_fixed(recipient)
 
 
 def submit_finalize_step(trade_id: str, actor_team: str, drops: List[Dict[str, str]], pickups: List[Dict[str, str]]) -> str:
-    """
-    Recipient submits first -> status FINALIZE_PROPOSER
-    Proposer submits second -> execute trade + status ACCEPTED
-    Pickups are REQUIRED if open_slots > 0 (exactly open_slots).
-    """
     trade = get_trade(trade_id)
     proposer = trade["proposer_team"]
     recipient = trade["recipient_team"]
@@ -604,20 +527,18 @@ def submit_finalize_step(trade_id: str, actor_team: str, drops: List[Dict[str, s
     return "EXECUTED"
 
 
-# ===========================
+# ======================================================
 # UI HELPERS
-# ===========================
+# ======================================================
 def strip_internal_cols(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
+    # keep held_by_norm; drop held_by from display if you want
     if "held_by" in out.columns:
         out = out.drop(columns=["held_by"])
     return out
 
 
 def selectable_editor(df: pd.DataFrame, key: str, checkbox_label: str, title: str) -> List[Dict[str, str]]:
-    """
-    Uses a compact data_editor for selection + expander for full columns.
-    """
     st.markdown(f"### {title}")
     if df is None or df.empty:
         st.info("No players.")
@@ -675,15 +596,15 @@ def trade_items_with_player_columns(players_df: pd.DataFrame, items: pd.DataFram
 
 
 def clear_ui_caches():
-    # Also clears common keys used by other pages in this project
+    # clear common keys used by other pages + refresh cached pulls
     for k in ["players", "lineup_state", "roster", "starters", "bench"]:
         st.session_state.pop(k, None)
     st.cache_data.clear()
 
 
-# ===========================
+# ======================================================
 # MAIN DATA
-# ===========================
+# ======================================================
 teams_df = load_teams_df()
 players_display = build_players_display_df()
 
@@ -694,10 +615,9 @@ if teams_df.empty:
 team_names = teams_df["team_name"].tolist()
 default_my_team = st.session_state.get("team_name", team_names[0])
 
-
-# ===========================
+# ======================================================
 # PROPOSE TRADE
-# ===========================
+# ======================================================
 st.subheader("📨 Propose a Trade")
 
 c1, c2 = st.columns(2)
@@ -707,8 +627,10 @@ with c2:
     partner_choices = [t for t in team_names if t != my_team]
     partner_team = st.selectbox("Trade partner", partner_choices)
 
-my_roster = players_display[players_display["held_by"] == my_team].copy()
-partner_roster = players_display[players_display["held_by"] == partner_team].copy()
+my_roster = players_display[players_display["held_by_norm"] == my_team].copy()
+partner_roster = players_display[players_display["held_by_norm"] == partner_team].copy()
+
+st.caption(f"{my_team} roster rows: {len(my_roster)} (should be {ROSTER_TOTAL})")
 
 give_players = selectable_editor(my_roster, key="give_editor", checkbox_label="Send", title=f"{my_team} roster (SEND)")
 st.divider()
@@ -741,10 +663,9 @@ with p2:
 
 st.divider()
 
-
-# ===========================
+# ======================================================
 # TRADE INBOX
-# ===========================
+# ======================================================
 st.subheader("📬 Trades")
 
 viewer_team = st.selectbox("View trades for team", team_names, index=team_names.index(my_team))
@@ -793,7 +714,6 @@ for _, t in trades_df.iterrows():
             if is_recipient_viewing:
                 if a1.button("✅ Accept", key=f"accept_{trade_id}"):
                     try:
-                        # Auto-finalize if no balancing needed for either team
                         needs = compute_trade_needs(trade_id)
                         no_balancing_needed = (
                             needs[proposer]["required_drops"] == 0
@@ -853,19 +773,29 @@ for _, t in trades_df.iterrows():
             post_roster_proposer = simulate_post_trade_roster(players_display, proposer, items)
             post_roster_recipient = simulate_post_trade_roster(players_display, recipient, items)
 
-            # FULL list of free agents (no truncation). Provide search to keep it usable.
-            free_agents_all = players_display[players_display["held_by"].isna()].copy()
+            # FULL list of free agents
+            free_agents_all = players_display[players_display["held_by_norm"] == ""].copy()
             free_agents_all = free_agents_all.drop_duplicates(subset=["Name", "team"], keep="first").reset_index(drop=True)
 
+            fa_query = st.text_input(
+                "Search free agents (optional)",
+                key=f"fa_q_{trade_id}_{viewer_team}",
+                placeholder="Type a name or NHL team abbreviation…",
+            )
             free_agents = free_agents_all
+            if fa_query:
+                q = fa_query.lower()
+                free_agents = free_agents_all[
+                    free_agents_all["Name"].astype(str).str.lower().str.contains(q)
+                    | free_agents_all["team"].astype(str).str.lower().str.contains(q)
+                ].copy()
 
-            # Load stored moves (read-only display for the other side)
             tr_full = get_trade(trade_id)
             rec_moves, pro_moves = load_moves(tr_full)
 
             if status == "FINALIZE_RECIPIENT":
                 if is_recipient_viewing:
-                    st.warning("Step 1 of 2: **Recipient** must finalize roster moves, then it kicks back to proposer.")
+                    st.warning("Step 1 of 2: **Recipient** finalizes first, then it kicks back to proposer.")
 
                     req_drops = needs[recipient]["required_drops"]
                     req_picks = needs[recipient]["open_slots"]  # REQUIRED
@@ -877,7 +807,6 @@ for _, t in trades_df.iterrows():
                     picks = []
 
                     if req_drops > 0:
-                        st.info("Drops are required. You may drop a newly acquired player.")
                         drops = selectable_editor(
                             post_roster_recipient,
                             key=f"rec_drops_{trade_id}",
@@ -888,7 +817,6 @@ for _, t in trades_df.iterrows():
                         st.caption("No drops required.")
 
                     if req_picks > 0:
-                        st.info("Pickups are required. Select exactly the needed number of free agents.")
                         picks = selectable_editor(
                             free_agents,
                             key=f"rec_picks_{trade_id}",
@@ -917,12 +845,11 @@ for _, t in trades_df.iterrows():
                             st.error(str(e))
                 else:
                     st.info("Waiting on recipient to finalize moves.")
-                    st.caption("Recipient selections so far:")
                     st.json(rec_moves)
 
             if status == "FINALIZE_PROPOSER":
                 if is_proposer_viewing:
-                    st.warning("Step 2 of 2: **Proposer** must finalize roster moves. Submitting executes the trade.")
+                    st.warning("Step 2 of 2: **Proposer** finalizes. Submitting executes the trade.")
                     st.caption("Recipient submitted moves (read-only):")
                     st.json(rec_moves)
 
@@ -936,7 +863,6 @@ for _, t in trades_df.iterrows():
                     picks = []
 
                     if req_drops > 0:
-                        st.info("Drops are required. You may drop a newly acquired player.")
                         drops = selectable_editor(
                             post_roster_proposer,
                             key=f"pro_drops_{trade_id}",
@@ -947,7 +873,6 @@ for _, t in trades_df.iterrows():
                         st.caption("No drops required.")
 
                     if req_picks > 0:
-                        st.info("Pickups are required. Select exactly the needed number of free agents.")
                         picks = selectable_editor(
                             free_agents,
                             key=f"pro_picks_{trade_id}",
@@ -976,7 +901,6 @@ for _, t in trades_df.iterrows():
                             st.error(str(e))
                 else:
                     st.info("Waiting on proposer to finalize moves.")
-                    st.caption("Proposer selections so far:")
                     st.json(pro_moves)
 
         # -----------------------
@@ -987,14 +911,15 @@ for _, t in trades_df.iterrows():
             st.subheader("Build Counter Offer")
 
             new_proposer = viewer_team
-            new_recipient = proposer  # counter goes back to original proposer
+            new_recipient = proposer  # counter back to original proposer
 
-            my_roster2 = players_display[players_display["held_by"] == new_proposer].copy()
-            their_roster2 = players_display[players_display["held_by"] == new_recipient].copy()
+            my_roster2 = players_display[players_display["held_by_norm"] == new_proposer].copy()
+            their_roster2 = players_display[players_display["held_by_norm"] == new_recipient].copy()
 
             ctr_give = selectable_editor(my_roster2, key=f"ctr_give_{trade_id}", checkbox_label="Send", title=f"{new_proposer} roster (SEND)")
             st.divider()
             ctr_recv = selectable_editor(their_roster2, key=f"ctr_recv_{trade_id}", checkbox_label="Receive", title=f"{new_recipient} roster (RECEIVE)")
+
             ctr_msg = st.text_input("Counter message (optional)", key=f"ctr_msg_{trade_id}")
 
             cbtn1, cbtn2 = st.columns(2)
