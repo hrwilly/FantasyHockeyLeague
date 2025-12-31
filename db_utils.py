@@ -386,15 +386,6 @@ def load_players_for_team(team_name: str, batch_size=500, max_retries=3, delay=1
 #
 # NOTE ABOUT "Pos.": PostgREST chokes on select("Pos.") so we always select("*") when we need it.
 
-from __future__ import annotations
-
-from datetime import datetime
-from typing import Any
-
-import pandas as pd
-import streamlit as st
-from supabase import create_client
-
 
 # ===========================
 # CONFIG: ROSTER RULES
@@ -413,48 +404,6 @@ TRADE_STATUSES = [
     "CANCELLED",
     "COUNTERED",
 ]
-
-
-# ===========================
-# SUPABASE CLIENT
-# ===========================
-@st.cache_resource
-def _sb():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
-
-
-def _utc_now_iso() -> str:
-    return datetime.utcnow().isoformat()
-
-
-# ===========================
-# BASIC LOADERS (used across pages)
-# ===========================
-@st.cache_data(ttl=120)
-def load_teams() -> pd.DataFrame:
-    resp = _sb().table("teams").select("*").execute()
-    return pd.DataFrame(resp.data or [])
-
-
-@st.cache_data(ttl=120)
-def load_players() -> pd.DataFrame:
-    resp = _sb().table("players").select("*").execute()
-    return pd.DataFrame(resp.data or [])
-
-
-@st.cache_data(ttl=120)
-def load_points() -> pd.DataFrame:
-    resp = _sb().table("points").select("*").execute()
-    return pd.DataFrame(resp.data or [])
-
-
-@st.cache_data(ttl=120)
-def load_last_week_stats() -> pd.DataFrame:
-    # If your table is named differently, change it here.
-    resp = _sb().table("last_week_stats").select("*").execute()
-    return pd.DataFrame(resp.data or [])
 
 
 # ===========================
