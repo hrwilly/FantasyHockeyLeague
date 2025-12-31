@@ -95,6 +95,15 @@ def compute_fantasy_points(df):
     scored["FantasyPoints"] = scored.sum(axis=1).round(1)
     return scored
 
+<<<<<<< HEAD
+=======
+selected_week = st.selectbox("Select week", list(range(7, 17)))
+st.session_state['selected_week'] = selected_week
+selected_day = st.selectbox("Select day", list(range(1, 5)))
+st.session_state['selected_day'] = selected_day
+
+# --- Run Weekly Scoring ---
+>>>>>>> 653217013b9e510d7639057f23ecc90ff2aab640
 if st.button("🏁 Run Weekly Scoring"):
     teams = get_team_names()
     current_cum = pd.DataFrame()
@@ -225,4 +234,24 @@ if st.button("💾 Save Matchup Results"):
             r["team_name"], r["W"], r["L"], r["PF"], r["PA"], r["Place"]
         )
 
+<<<<<<< HEAD
     st.success("✅ Standings updated")
+=======
+    st.success(f"✅ Week {selected_week} processed successfully!")
+
+if st.button('🏁 Run off-week'):
+
+    coll_teams = get_team_names()
+    current_cum = pd.DataFrame()
+
+    for team in coll_teams.Name:
+        try:
+            team_points = get_current_data(team[:-1])
+            current_cum = pd.concat([current_cum, team_points])
+        except Exception as e:
+            st.warning(f"Skipping team {team[:-1]}: {e}")
+
+    db_utils.save_last_week_stats(current_cum)
+
+    st.success(f"✅ Updated stats between weeks.")
+>>>>>>> 653217013b9e510d7639057f23ecc90ff2aab640
