@@ -20,6 +20,10 @@ def load_players_cached():
 def load_last_week_stats_cached():
     return db_utils.load_last_week_stats()
 
+@st.cache_data(ttl=180, show_spinner=False)
+def load_points_cached():
+    return db_utils.load_points()
+
 @st.cache_data(ttl=30, show_spinner=False)
 def load_lineup_state_team_cached(team_name: str):
     return db_utils.load_lineup_state(team_name)
@@ -35,14 +39,48 @@ with st.sidebar:
 teams = load_teams_cached()
 players = load_players_cached()
 stats = load_last_week_stats_cached()
+points = load_points_cached()
 
 if teams.empty:
     st.warning("No teams registered yet.")
     st.stop()
 
 # Merge last_week_stats onto players so we can display all stat columns
+# last_week_stats is expected to have Name, team + stat cols
 if stats is not None and not stats.empty:
     players = players.merge(stats, on=["Name", "team"], how="left")
+
+# ======================================================
+# Compute WeeklyPts + CumulativePts (league-wide) and merge
+# ======================================================
+latest_week = None
+
+weekly_total = pd.DataFrame(columns=["Name", "team", "WeeklyPts"])
+cumulative_total = pd.DataFrame(columns=["Name", "team", "CumulativePts"])
+
+if points is not None and not points.empty and "Week" in points.columns:
+    latest_week = int(points["Week"].max())
+
+    weekly = points.loc[points["Week"] == latest_week, ["Name", "team", "FantasyPoints"]].copy()
+    weekly_total = (
+        weekly.groupby(["Name", "team"], as_index=False)["FantasyPoints"]
+        .sum()
+        .rename(columns={"FantasyPoints": "WeeklyPts"})
+    )
+
+    cumulative_total = (
+        points.groupby(["Name", "team"], as_index=False)["FantasyPoints"]
+        .sum()
+        .rename(columns={"FantasyPoints": "CumulativePts"})
+    )
+
+# Avoid any collisions if these columns happen to exist
+players = players.drop(columns=["WeeklyPts", "CumulativePts"], errors="ignore")
+players = players.merge(weekly_total, on=["Name", "team"], how="left")
+players = players.merge(cumulative_total, on=["Name", "team"], how="left")
+
+players["WeeklyPts"] = players.get("WeeklyPts", 0.0).fillna(0.0).astype(float).round(1)
+players["CumulativePts"] = players.get("CumulativePts", 0.0).fillna(0.0).astype(float).round(1)
 
 # ======================================================
 # SELECT TEAM
@@ -61,14 +99,19 @@ else:
 players["player_pos"] = players["player_pos"].fillna("bench")
 
 # ======================================================
-# DISPLAY: TEAM ROSTER (WITH ALL STATS COLS)
+# DISPLAY: TEAM ROSTER (WITH ALL STATS + Weekly/Cum)
 # Remove held_by from display
 # ======================================================
 st.subheader(f"{my_team_name}'s Current Roster")
 
+if latest_week is not None:
+    st.caption(f"WeeklyPts = Week {latest_week} totals | CumulativePts = season-to-date")
+else:
+    st.caption("WeeklyPts/CumulativePts are 0 because there are no saved points yet.")
+
 team_roster = players[players["held_by"] == my_team_name].copy()
 
-front_cols = [c for c in ["Name", "Pos.", "team", "player_pos"] if c in team_roster.columns]
+front_cols = [c for c in ["Name", "Pos.", "team", "player_pos", "WeeklyPts", "CumulativePts"] if c in team_roster.columns]
 rest_cols = [
     c for c in team_roster.columns
     if c not in front_cols and c not in ["player_name", "held_by"]
@@ -85,14 +128,14 @@ else:
     )
 
 # ======================================================
-# DISPLAY: FREE AGENTS (WITH ALL STATS COLS)
+# DISPLAY: FREE AGENTS (WITH ALL STATS + Weekly/Cum)
 # Remove held_by + player_pos from display
 # ======================================================
 st.subheader("Available Free Agents")
 
 free_agents = players[players["held_by"].isna()].copy()
 
-fa_front = [c for c in ["Name", "Pos.", "team"] if c in free_agents.columns]
+fa_front = [c for c in ["Name", "Pos.", "team", "WeeklyPts", "CumulativePts"] if c in free_agents.columns]
 fa_rest = [
     c for c in free_agents.columns
     if c not in fa_front
@@ -158,11 +201,9 @@ if st.button("✅ Add & Drop Player"):
     add_name = st.session_state.add_player.split(" - ")[0].strip()
     drop_name = st.session_state.drop_player.split(" - ")[0].strip()
 
-    # Grab the row for the player being added
     add_row = players.loc[players["Name"] == add_name].iloc[0]
 
     # Determine dropped player's current lineup position (starter/bench)
-    # Prefer team_roster since it already has player_pos merged in
     dropped_pos = "bench"
     try:
         dropped_pos = (
@@ -182,7 +223,7 @@ if st.button("✅ Add & Drop Player"):
         drop_player=drop_name,
         add_player_pos=add_row["Pos."],
         add_player_team=add_row["team"],
-        starter=starter_flag,   # ✅ matches dropped player's slot
+        starter=starter_flag,  # matches dropped player's slot
     )
 
     st.success(
@@ -190,7 +231,6 @@ if st.button("✅ Add & Drop Player"):
         f"({add_name} set to {'starter' if starter_flag else 'bench'})"
     )
 
-    # Reset selections
     st.session_state.add_player = ""
     st.session_state.drop_player = ""
 
