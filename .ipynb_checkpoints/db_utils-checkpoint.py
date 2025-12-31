@@ -237,4 +237,85 @@ def update_team_record(team_name, W=None, L=None, PF=None, PA=None, Place=None):
         supabase.table("teams").update(updates).eq("team_name", team_name).execute()
 
     
+def load_lineup_state(team_name):
+    resp = (
+        supabase
+        .table("lineup_state")
+        .select("*")
+        .eq("team_name", team_name)
+        .execute()
+    )
+    return pd.DataFrame(resp.data)
+
+def save_lineup_state(rows):
+    """
+    rows: list of dicts
+    """
+    supabase.table("lineup_state").upsert(rows).execute()
+
+def swap_lineup_state(team_name, player_out, player_in):
+
+    supabase.table("lineup_state").update(
+        {"player_pos": "bench"}
+    ).eq("team_name", team_name) \
+     .eq("player_name", player_out) \
+     .execute()
+
+    supabase.table("lineup_state").update(
+        {"player_pos": "starter"}
+    ).eq("team_name", team_name) \
+     .eq("player_name", player_in) \
+     .execute()
+
+def lock_weekly_rosters(week):
+    resp = supabase.table("lineup_state").select("*").execute()
+    lineup = resp.data
+
+    if not lineup:
+        return
+
+    supabase.table("active_roster").delete().eq("week", week).execute()
+
+    locked = [
+        {**row, "week": week}
+        for row in lineup
+    ]
+
+    supabase.table("active_roster").insert(locked).execute()
+
+def add_drop_player(
+    team_name,
+    add_player,
+    drop_player,
+    add_player_pos,
+    add_player_team,
+    starter=False
+):
+    """
+    Handles add/drop consistently across players + lineup_state
+    """
+
+    # --- Update ownership ---
+    supabase.table("players").update(
+        {"held_by": team_name}
+    ).eq("Name", add_player).execute()
+
+    supabase.table("players").update(
+        {"held_by": None}
+    ).eq("Name", drop_player).execute()
+
+    # --- Remove dropped player from lineup ---
+    supabase.table("lineup_state").delete() \
+        .eq("team_name", team_name) \
+        .eq("player_name", drop_player) \
+        .execute()
+
+    # --- Insert added player into lineup ---
+    supabase.table("lineup_state").upsert({
+        "team_name": team_name,
+        "player_name": add_player,
+        "player_pos": "starter" if starter else "bench",
+        "Pos.": add_player_pos,
+        "team": add_player_team
+    }).execute()
 

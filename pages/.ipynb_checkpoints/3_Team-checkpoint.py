@@ -1,181 +1,169 @@
 import streamlit as st
 import pandas as pd
 import db_utils
-import time
-import numpy as np
 
 st.title("🏒 My Team")
 
-# --- Auto-refresh every 5 seconds ---
-refresh_interval = 5
-if "last_refresh" not in st.session_state:
-    st.session_state["last_refresh"] = time.time()
-if time.time() - st.session_state["last_refresh"] > refresh_interval:
-    st.session_state["last_refresh"] = time.time()
+# ----------------------------
+# Load teams
+# ----------------------------
+teams = db_utils.load_teams()
 
-# --- Load teams ---
-if "teams" not in st.session_state:
-    st.session_state.teams = db_utils.load_teams()
-teams = st.session_state.teams
 if teams.empty:
     st.warning("No teams registered yet.")
     st.stop()
 
-# --- Load players & points only once ---
-if "players" not in st.session_state:
-    players = db_utils.load_players()
-    points = db_utils.load_points()
-    weekly = points[points['Week'] == max(points['Week'])][['Name', 'team', 'FantasyPoints', 'Week']]
-    weekly_total = weekly.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
-    weekly_total['WeeklyPts'] = weekly_total.sum(axis=1)
-    total = points.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
-    total['CumulativePts'] = total.sum(axis=1)
-    total = total.reset_index()[['Name','team','CumulativePts']]
-    players = pd.merge(players, weekly_total, on=['Name','team'], how='left')
-    players = pd.merge(players, total, on=['Name','team'], how='left')
-    st.session_state['players'] = players
-else:
-    players = st.session_state.players
-
-# --- Select your team ---
+# ----------------------------
+# Select team
+# ----------------------------
 selected_team = st.selectbox(
-    "Select your team:", 
-    teams["team_name"], 
-    index=teams["team_name"].tolist().index(st.session_state.get("team_name", teams["team_name"].iloc[0]))
+    "Select your team:",
+    teams["team_name"]
 )
-st.session_state.team_name = selected_team
 
-# --- Build roster function ---
-def build_roster(players_df, team_name):
-    roster_template = {"F": 6, "D": 4, "G": 2}
-    num_bench = 5
-    team_players = players_df[players_df["held_by"] == team_name].copy()
+# ----------------------------
+# Load players + lineup state
+# ----------------------------
+players = db_utils.load_players()
+lineup_state = db_utils.load_lineup_state(selected_team)
 
-    # Create roster placeholders
-    roster_rows = []
-    for pos, slots in roster_template.items():
-        for _ in range(slots):
-            roster_rows.append({"Pos.": pos, "Name": "---", "team": "---", "WeeklyPts": "---", "CumulativePts": "---"})
-    for _ in range(num_bench):
-        roster_rows.append({"Pos.": "Bench", "Name": "---", "team": "---", "WeeklyPts": "---", "CumulativePts": "---"})
-    my_roster = pd.DataFrame(roster_rows)
+# ----------------------------
+# Initialize lineup_state if empty
+# ----------------------------
+roster_template = {"F": 6, "D": 4, "G": 2}
+num_bench = 5
 
-    # Counters for starters per position
-    pos_counts = {pos: 0 for pos in roster_template.keys()}
-    bench_index = sum(roster_template.values())
+if lineup_state.empty:
+    team_players = players[players["held_by"] == selected_team].copy()
+
+    lineup_rows = []
+    pos_counts = {pos: 0 for pos in roster_template}
 
     for _, row in team_players.iterrows():
         pos = row["Pos."]
+
         if pos in roster_template and pos_counts[pos] < roster_template[pos]:
-            start_index = sum(
-                roster_template[p] for p in list(roster_template.keys())
-                if list(roster_template.keys()).index(p) < list(roster_template.keys()).index(pos)
-            )
-            my_roster.loc[start_index + pos_counts[pos], ["Name", "team", "WeeklyPts", "CumulativePts"]] = row[
-                ["Name", "team", "WeeklyPts", "CumulativePts"]
-            ]
+            player_pos = "starter"
             pos_counts[pos] += 1
         else:
-            # Fill bench sequentially
-            my_roster.loc[bench_index, ["Pos.", "Name", "team", "WeeklyPts", "CumulativePts"]] = [
-                f"Bench - {pos}", row["Name"], row["team"], row["WeeklyPts"], row["CumulativePts"]
-            ]
-            bench_index += 1
-    return my_roster
+            player_pos = "bench"
 
-# --- Build roster for selected team ---
-st.session_state.roster = build_roster(st.session_state.players, selected_team)
-st.session_state.starters = st.session_state.roster[~st.session_state.roster["Pos."].str.startswith("Bench") & 
-                                                   (st.session_state.roster["Name"] != "---")]
-st.session_state.bench = st.session_state.roster[st.session_state.roster["Pos."].str.startswith("Bench") & 
-                                                 (st.session_state.roster["Name"] != "---")]
-
-# --- Display roster ---
-st.subheader(f"{selected_team}'s Roster")
-roster_placeholder = st.empty()
-roster_placeholder.table(st.session_state.roster.style.format({"WeeklyPts": "{:.1f}", "CumulativePts": "{:.1f}"}, na_rep = '0'))
-
-# --- Week selection ---
-weeks = list(range(6, 16))
-selected_week = st.selectbox("Select Week", weeks)
-
-# --- Submit Players ---
-if st.button("Submit Players"):
-    db_utils.delete_prev_roster(selected_team, selected_week)
-    starters = st.session_state.starters
-    bench = st.session_state.bench
-
-    starter_rows = [
-        {
+        lineup_rows.append({
             "team_name": selected_team,
             "player_name": row["Name"],
-            "player_pos": "starter",
-            "Pos.": row["Pos."],
-            "team": row["team"],
-            "week": selected_week
-        } for _, row in starters.iterrows()
-    ]
+            "player_pos": player_pos,
+            "Pos.": pos,
+            "team": row["team"]
+        })
 
-    bench_rows = [
-        {
-            "team_name": selected_team,
-            "player_name": row["Name"],
-            "player_pos": "bench",
-            "Pos.": row["Pos."],
-            "team": row["team"],
-            "week": selected_week
-        } for _, row in bench.iterrows()
-    ]
+    if lineup_rows:
+        db_utils.save_lineup_state(lineup_rows)
+        lineup_state = db_utils.load_lineup_state(selected_team)
 
-    db_utils.submit_roster(starter_rows + bench_rows)
-    st.success(f"✅ Lineup for Week {selected_week} submitted successfully!")
+# ----------------------------
+# Build roster tables
+# ----------------------------
+starters = lineup_state[lineup_state["player_pos"] == "starter"]
+bench = lineup_state[lineup_state["player_pos"] == "bench"]
 
-# --- Swap Players ---
-st.subheader("Swap Players (Starters ↔ Bench)")
-if "swap1" not in st.session_state: st.session_state.swap1 = ""
-if "swap2" not in st.session_state: st.session_state.swap2 = ""
+# Order starters by position
+starter_rows = []
+for pos, slots in roster_template.items():
+    pos_players = starters[starters["Pos."] == pos].head(slots)
+    starter_rows.append(pos_players)
 
-# Starter selection
-swap1_options = [""] + st.session_state.starters["Name"].tolist()
-swap1_index = swap1_options.index(st.session_state.swap1) if st.session_state.swap1 in st.session_state.starters["Name"].tolist() else 0
-st.session_state.swap1 = st.selectbox("Select Starter to swap out", swap1_options, index=swap1_index)
+starters = pd.concat(starter_rows) if starter_rows else pd.DataFrame()
 
-# Bench selection filtered by position
-if st.session_state.swap1:
-    pos1 = st.session_state.roster.loc[st.session_state.roster["Name"] == st.session_state.swap1, "Pos."].values[0]
-    swap2_list = st.session_state.bench[st.session_state.bench["Pos."].str.endswith(pos1)]["Name"].tolist()
+# ----------------------------
+# Display roster
+# ----------------------------
+st.subheader(f"{selected_team}'s Lineup")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("### Starters")
+    if starters.empty:
+        st.info("No starters set.")
+    else:
+        st.dataframe(
+            starters[["player_name", "Pos.", "team"]],
+            hide_index=True,
+            use_container_width=True
+        )
+
+with col2:
+    st.markdown("### Bench")
+    if bench.empty:
+        st.info("No bench players.")
+    else:
+        st.dataframe(
+            bench[["player_name", "Pos.", "team"]],
+            hide_index=True,
+            use_container_width=True
+        )
+
+# ----------------------------
+# Swap Players
+# ----------------------------
+st.divider()
+st.subheader("🔄 Swap Players (Starter ↔ Bench)")
+
+if starters.empty or bench.empty:
+    st.info("You need at least one starter and one bench player to swap.")
+    st.stop()
+
+# Session state
+if "swap_out" not in st.session_state:
+    st.session_state.swap_out = ""
+if "swap_in" not in st.session_state:
+    st.session_state.swap_in = ""
+
+swap_out_options = [""] + starters["player_name"].tolist()
+swap_out = st.selectbox(
+    "Select starter to swap out",
+    swap_out_options,
+    index=swap_out_options.index(st.session_state.swap_out)
+    if st.session_state.swap_out in swap_out_options else 0
+)
+
+st.session_state.swap_out = swap_out
+
+# Bench filtered by position
+if swap_out:
+    out_pos = starters.loc[
+        starters["player_name"] == swap_out, "Pos."
+    ].values[0]
+    bench_candidates = bench[bench["Pos."] == out_pos]["player_name"].tolist()
 else:
-    swap2_list = []
+    bench_candidates = []
 
-swap2_options = [""] + swap2_list
-swap2_index = swap2_options.index(st.session_state.swap2) if st.session_state.swap2 in swap2_list else 0
-st.session_state.swap2 = st.selectbox("Select Bench player to swap in", swap2_options, index=swap2_index)
+swap_in_options = [""] + bench_candidates
+swap_in = st.selectbox(
+    "Select bench player to swap in",
+    swap_in_options,
+    index=swap_in_options.index(st.session_state.swap_in)
+    if st.session_state.swap_in in swap_in_options else 0
+)
 
-# Swap action
-if st.button("Swap Players") and st.session_state.swap1 and st.session_state.swap2:
-    idx1 = st.session_state.players.index[st.session_state.players["Name"] == st.session_state.swap1][0]
-    idx2 = st.session_state.players.index[st.session_state.players["Name"] == st.session_state.swap2][0]
+st.session_state.swap_in = swap_in
 
-    # Swap rows
-    st.session_state.players.loc[[idx1, idx2]] = st.session_state.players.loc[[idx2, idx1]].values
+# ----------------------------
+# Execute swap
+# ----------------------------
+if st.button("Swap Players") and swap_out and swap_in:
 
-    # Fix positions
-    pos1 = st.session_state.players.loc[idx1, "Pos."]
-    pos2 = st.session_state.players.loc[idx2, "Pos."]
-    base_pos = pos1 if not pos1.startswith("Bench") else pos2.split("Bench - ")[-1]
-    st.session_state.players.loc[idx1, "Pos."] = base_pos
-    st.session_state.players.loc[idx2, "Pos."] = base_pos
+    db_utils.swap_lineup_state(
+        team_name=selected_team,
+        player_out=swap_out,
+        player_in=swap_in
+    )
 
-    # Rebuild roster
-    st.session_state.roster = build_roster(st.session_state.players, selected_team)
-    roster_placeholder.table(st.session_state.roster.style.format({"WeeklyPts": "{:.1f}", "CumulativePts": "{:.1f}"}, na_rep = '0'))
+    st.success("✅ Players swapped successfully!")
 
-    # Update starters and bench
-    st.session_state.starters = st.session_state.roster[~st.session_state.roster["Pos."].str.startswith("Bench") &
-                                                       (st.session_state.roster["Name"] != "---")]
-    st.session_state.bench = st.session_state.roster[st.session_state.roster["Pos."].str.startswith("Bench") &
-                                                     (st.session_state.roster["Name"] != "---")]
+    # Reset state
+    st.session_state.swap_out = ""
+    st.session_state.swap_in = ""
 
-    # Reset selections
-    st.session_state.swap1 = ""
-    st.session_state.swap2 = ""
+    # Force reload
+    st.experimental_rerun()
