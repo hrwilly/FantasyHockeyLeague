@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from datetime import date
 import db_utils
 
 st.title("🏆 Commissioner Tools")
@@ -45,29 +44,33 @@ def get_team_names():
 
 def get_current_data(team):
     url = f"https://collegehockeyinc.com/teams/{team}/stats26-overall.php"
-    offense = pd.read_html(url)[0]["Scoring"]
-    goalies = pd.read_html(url)[1]["Goaltending"]
+    tables = pd.read_html(url)
 
-    offense = offense[offense["Name, Yr"] != "TOTAL"]
-    goalies = goalies[goalies["Name, Yr"] != "TOTALS"]
+    offense = tables[0]["Scoring"].copy()
+    goalies = tables[1]["Goaltending"].copy()
+
+    offense = offense[offense["Name, Yr"] != "TOTAL"].copy()
+    goalies = goalies[goalies["Name, Yr"] != "TOTALS"].copy()
 
     offense[["Name", "Pos.", "Yr"]] = offense["Name, Yr"].str.split(",", expand=True)
     goalies[["Name", "Yr"]] = goalies["Name, Yr"].str.split(",", expand=True)
 
     stats = pd.merge(offense, goalies, on=["Name", "Yr"], how="outer", suffixes=("_off", "_goal"))
-    stats["GP"] = stats["GP_off"].fillna(stats["GP_goal"])
+    stats["GP"] = stats.get("GP_off", pd.Series(dtype=float)).fillna(stats.get("GP_goal", pd.Series(dtype=float)))
     stats = stats.drop(columns=["GP_off", "GP_goal"], errors="ignore")
 
     for col in [
         "G","A","Shots","PIM","GWG","PPG","SHG","+/-","FOW","FOL","BLK",
         "W","GA","SV","SO"
     ]:
-        if f"{col}_off" in stats.columns and f"{col}_goal" in stats.columns:
-            stats[col] = stats[f"{col}_off"].fillna(stats[f"{col}_goal"])
-        elif f"{col}_off" in stats.columns:
-            stats[col] = stats[f"{col}_off"]
-        elif f"{col}_goal" in stats.columns:
-            stats[col] = stats[f"{col}_goal"]
+        off = f"{col}_off"
+        gol = f"{col}_goal"
+        if off in stats.columns and gol in stats.columns:
+            stats[col] = stats[off].fillna(stats[gol])
+        elif off in stats.columns:
+            stats[col] = stats[off]
+        elif gol in stats.columns:
+            stats[col] = stats[gol]
 
     stats = stats.drop(columns=[c for c in stats.columns if c.endswith("_off") or c.endswith("_goal")], errors="ignore")
     stats["team"] = team
@@ -77,6 +80,10 @@ def get_current_data(team):
         "GP","G","A","Shots","PIM","GWG","PPG","SHG","+/-","FOW","FOL","BLK",
         "W","GA","SV","SO"
     ]
+    for c in stats_cols:
+        if c not in stats.columns:
+            stats[c] = 0
+
     return stats[stats_cols].fillna(0)
 
 def compute_fantasy_points(df):
@@ -90,20 +97,11 @@ def compute_fantasy_points(df):
     scored = df.copy()
     for col, mult in multipliers.items():
         if col in scored.columns:
-            scored[col] *= mult
+            scored[col] = scored[col] * mult
 
     scored["FantasyPoints"] = scored.sum(axis=1).round(1)
     return scored
 
-<<<<<<< HEAD
-=======
-selected_week = st.selectbox("Select week", list(range(7, 17)))
-st.session_state['selected_week'] = selected_week
-selected_day = st.selectbox("Select day", list(range(1, 5)))
-st.session_state['selected_day'] = selected_day
-
-# --- Run Weekly Scoring ---
->>>>>>> 653217013b9e510d7639057f23ecc90ff2aab640
 if st.button("🏁 Run Weekly Scoring"):
     teams = get_team_names()
     current_cum = pd.DataFrame()
@@ -114,7 +112,11 @@ if st.button("🏁 Run Weekly Scoring"):
         except Exception as e:
             st.warning(f"Skipping {team}: {e}")
 
-    last_week = db_utils.load_last_week_stats().set_index(["Name", "team"])
+    last_week = db_utils.load_last_week_stats()
+    if last_week is None or last_week.empty:
+        last_week = pd.DataFrame(columns=current_cum.columns).set_index(current_cum.index.names)
+
+    last_week = last_week.set_index(["Name", "team"])
     current_cum, last_week = current_cum.align(last_week, join="outer", fill_value=0)
 
     new_players = current_cum.index.difference(last_week.index)
@@ -128,7 +130,7 @@ if st.button("🏁 Run Weekly Scoring"):
     st.session_state["current_cum"] = current_cum
 
     st.success("✅ Weekly scoring calculated")
-    st.dataframe(weekly_scored)
+    st.dataframe(weekly_scored, use_container_width=True)
 
 # ======================================================
 # SAVE WEEKLY SCORING
@@ -154,51 +156,55 @@ st.subheader("⚔️ Run Matchups")
 
 if st.button("🏁 Run Matchups"):
     matchups = db_utils.load_matchups()
-    teams = db_utils.load_teams()
-    rosters = db_utils.load_roster()
+    teams_df = db_utils.load_teams()
+    rosters = db_utils.load_roster()   # active_roster snapshot
     points = db_utils.load_points()
 
     matchups = (
         matchups
-        .merge(teams.rename(columns={"team_name": "home_team", "manager": "manager_1"}), on="home_team")
-        .merge(teams.rename(columns={"team_name": "away_team", "manager": "manager_2"}), on="away_team")
+        .merge(teams_df.rename(columns={"team_name": "home_team", "manager": "manager_1"}), on="home_team")
+        .merge(teams_df.rename(columns={"team_name": "away_team", "manager": "manager_2"}), on="away_team")
     )
 
-    week_matchups = matchups[matchups["week"] == selected_week]
-    week_rosters = rosters[rosters["week"] == selected_week]
-    week_points = points[points["Week"] == selected_week]
+    week_matchups = matchups[matchups["week"] == selected_week].copy()
+    week_rosters = rosters[rosters["week"] == selected_week].copy()
+    week_points = points[points["Week"] == selected_week].copy()
 
-    weekly = week_points[["Name", "team", "FantasyPoints", "Week"]]
-    totals = weekly.pivot_table(
-        index=["Name", "team"],
-        values="FantasyPoints",
-        aggfunc="sum"
-    ).reset_index(name="points")
-
-    week_rosters = week_rosters.merge(
-        totals.rename(columns={"Name": "player_name"}),
-        on=["player_name", "team"],
-        how="left"
-    )
+    if week_points.empty:
+        week_rosters["points"] = 0.0
+    else:
+        totals = (
+            week_points.groupby(["Name", "team"], as_index=False)["FantasyPoints"]
+            .sum()
+            .rename(columns={"Name": "player_name", "FantasyPoints": "points"})
+        )
+        week_rosters = week_rosters.merge(totals, on=["player_name", "team"], how="left")
+        week_rosters["points"] = week_rosters["points"].fillna(0.0)
 
     week_matchups["home_team_points"] = 0.0
     week_matchups["away_team_points"] = 0.0
 
     for i, row in week_matchups.iterrows():
-        for side in ["home", "away"]:
-            team = row[f"{side}_team"]
-            pts = (
-                week_rosters
-                .query("team_name == @team and player_pos == 'starter'")
-                ["points"]
-                .fillna(0)
-                .sum()
-            )
-            week_matchups.loc[i, f"{side}_team_points"] = round(pts, 1)
+        home = row["home_team"]
+        away = row["away_team"]
+
+        home_pts = (
+            week_rosters
+            .query("team_name == @home and player_pos == 'starter'")["points"]
+            .sum()
+        )
+        away_pts = (
+            week_rosters
+            .query("team_name == @away and player_pos == 'starter'")["points"]
+            .sum()
+        )
+
+        week_matchups.loc[i, "home_team_points"] = round(float(home_pts), 1)
+        week_matchups.loc[i, "away_team_points"] = round(float(away_pts), 1)
 
     db_utils.save_weekly_matchups(week_matchups, selected_week)
     st.success("✅ Matchups saved")
-    st.dataframe(week_matchups)
+    st.dataframe(week_matchups, use_container_width=True)
 
 st.divider()
 
@@ -208,50 +214,57 @@ st.divider()
 st.subheader("📊 Update Standings")
 
 if st.button("💾 Save Matchup Results"):
-    teams = db_utils.load_teams()
-    matchups = db_utils.load_matchups()
-    week_matchups = matchups[matchups["week"] == selected_week]
+    teams_df = db_utils.load_teams()
+    matchups_df = db_utils.load_matchups()
+    week_matchups = matchups_df[matchups_df["week"] == selected_week].copy()
 
+    # week_matchups should already have points after save_weekly_matchups
+    # If not, this will still work but won't change records meaningfully
     for _, row in week_matchups.iterrows():
         home, away = row["home_team"], row["away_team"]
-        hp, ap = row["home_team_points"], row["away_team_points"]
+        hp, ap = float(row.get("home_team_points", 0.0)), float(row.get("away_team_points", 0.0))
 
         if hp > ap:
-            teams.loc[teams["team_name"] == home, "W"] += 1
-            teams.loc[teams["team_name"] == away, "L"] += 1
+            teams_df.loc[teams_df["team_name"] == home, "W"] += 1
+            teams_df.loc[teams_df["team_name"] == away, "L"] += 1
         elif ap > hp:
-            teams.loc[teams["team_name"] == away, "W"] += 1
-            teams.loc[teams["team_name"] == home, "L"] += 1
+            teams_df.loc[teams_df["team_name"] == away, "W"] += 1
+            teams_df.loc[teams_df["team_name"] == home, "L"] += 1
 
-        teams.loc[teams["team_name"] == home, ["PF", "PA"]] += [hp, ap]
-        teams.loc[teams["team_name"] == away, ["PF", "PA"]] += [ap, hp]
+        teams_df.loc[teams_df["team_name"] == home, ["PF", "PA"]] += [hp, ap]
+        teams_df.loc[teams_df["team_name"] == away, ["PF", "PA"]] += [ap, hp]
 
-    teams = teams.sort_values(["W", "L", "PF"], ascending=[False, True, False]).reset_index(drop=True)
-    teams["Place"] = range(1, len(teams) + 1)
+    teams_df = teams_df.sort_values(["W", "L", "PF"], ascending=[False, True, False]).reset_index(drop=True)
+    teams_df["Place"] = range(1, len(teams_df) + 1)
 
-    for _, r in teams.iterrows():
+    for _, r in teams_df.iterrows():
         db_utils.update_team_record(
-            r["team_name"], r["W"], r["L"], r["PF"], r["PA"], r["Place"]
+            r["team_name"],
+            int(r["W"]),
+            int(r["L"]),
+            float(r["PF"]),
+            float(r["PA"]),
+            int(r["Place"]),
         )
 
-<<<<<<< HEAD
-    st.success("✅ Standings updated")
-=======
     st.success(f"✅ Week {selected_week} processed successfully!")
 
-if st.button('🏁 Run off-week'):
+st.divider()
 
-    coll_teams = get_team_names()
+# ======================================================
+# OFF-WEEK UPDATE
+# ======================================================
+st.subheader("🏁 Run off-week")
+
+if st.button("🏁 Run off-week"):
+    teams = get_team_names()
     current_cum = pd.DataFrame()
 
-    for team in coll_teams.Name:
+    for team in teams:
         try:
-            team_points = get_current_data(team[:-1])
-            current_cum = pd.concat([current_cum, team_points])
+            current_cum = pd.concat([current_cum, get_current_data(team[:-1])])
         except Exception as e:
-            st.warning(f"Skipping team {team[:-1]}: {e}")
+            st.warning(f"Skipping {team}: {e}")
 
     db_utils.save_last_week_stats(current_cum)
-
-    st.success(f"✅ Updated stats between weeks.")
->>>>>>> 653217013b9e510d7639057f23ecc90ff2aab640
+    st.success("✅ Updated stats between weeks.")
