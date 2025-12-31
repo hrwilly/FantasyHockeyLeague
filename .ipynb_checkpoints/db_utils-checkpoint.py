@@ -365,27 +365,109 @@ def load_players_for_team(team_name: str, batch_size=500, max_retries=3, delay=1
 
     return pd.DataFrame(all_rows)
 
-from typing import List, Dict, Optional
+# db_utils.py
+# Minimal, trade-focused db_utils that supports:
+# - loading teams/players/points/last_week_stats (used by Trades page)
+# - proposing/countering trades
+# - multi-step finalize WITHOUT a new table (stores moves on trades row as JSON)
+# - executing uneven trades with mandatory drops + optional pickups
+# - rebuilding lineup_state to fixed roster rules (6F/4D/2G starters, 5 bench = 17)
+#
+# REQUIREMENTS IN SUPABASE:
+# 1) trades.status must allow:
+#    PROPOSED, FINALIZE_RECIPIENT, FINALIZE_PROPOSER, ACCEPTED, DECLINED, CANCELLED, COUNTERED
+# 2) trades table has columns (JSONB):
+#    recipient_moves jsonb, proposer_moves jsonb
+#    (optional but supported) recipient_finalized boolean, proposer_finalized boolean
+# 3) lineup_state columns at least:
+#    team_name (text), player_name (text), player_pos (text: 'starter'/'bench'), "Pos." (text), team (text)
+# 4) players columns at least:
+#    Name (text), team (text), held_by (text nullable), "Pos." (text)
+#
+# NOTE ABOUT "Pos.": PostgREST chokes on select("Pos.") so we always select("*") when we need it.
+
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Any
 
-# ======================================================
-# TRADES
-# ======================================================
+import pandas as pd
+import streamlit as st
+from supabase import create_client
 
-TRADE_STATUSES = ["PROPOSED", "ACCEPTED", "DECLINED", "COUNTERED", "CANCELLED"]
 
+# ===========================
+# CONFIG: ROSTER RULES
+# ===========================
+STARTERS_BY_GROUP = {"F": 6, "D": 4, "G": 2}  # fixed starters
+ROSTER_TOTAL = 17
+STARTER_TOTAL = sum(STARTERS_BY_GROUP.values())
+BENCH_TOTAL = ROSTER_TOTAL - STARTER_TOTAL
+
+TRADE_STATUSES = [
+    "PROPOSED",
+    "FINALIZE_RECIPIENT",
+    "FINALIZE_PROPOSER",
+    "ACCEPTED",
+    "DECLINED",
+    "CANCELLED",
+    "COUNTERED",
+]
+
+
+# ===========================
+# SUPABASE CLIENT
+# ===========================
+@st.cache_resource
+def _sb():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+
+def _utc_now_iso() -> str:
+    return datetime.utcnow().isoformat()
+
+
+# ===========================
+# BASIC LOADERS (used across pages)
+# ===========================
+@st.cache_data(ttl=120)
+def load_teams() -> pd.DataFrame:
+    resp = _sb().table("teams").select("*").execute()
+    return pd.DataFrame(resp.data or [])
+
+
+@st.cache_data(ttl=120)
+def load_players() -> pd.DataFrame:
+    resp = _sb().table("players").select("*").execute()
+    return pd.DataFrame(resp.data or [])
+
+
+@st.cache_data(ttl=120)
+def load_points() -> pd.DataFrame:
+    resp = _sb().table("points").select("*").execute()
+    return pd.DataFrame(resp.data or [])
+
+
+@st.cache_data(ttl=120)
+def load_last_week_stats() -> pd.DataFrame:
+    # If your table is named differently, change it here.
+    resp = _sb().table("last_week_stats").select("*").execute()
+    return pd.DataFrame(resp.data or [])
+
+
+# ===========================
+# TRADE CRUD
+# ===========================
 def create_trade(
     proposer_team: str,
     recipient_team: str,
-    give_players: List[Dict],
-    receive_players: List[Dict],
-    message: Optional[str] = None,
-    parent_trade_id: Optional[str] = None,
-):
-    """
-    give_players/receive_players: list of dicts containing at least:
-      {"Name": "...", "team": "..."}  # 'team' here is the real team column in players table
-    """
+    give_players: list[dict],
+    receive_players: list[dict],
+    message: str | None = None,
+    parent_trade_id: str | None = None,
+) -> str:
     trade_row = {
         "proposer_team": proposer_team,
         "recipient_team": recipient_team,
@@ -393,245 +475,44 @@ def create_trade(
         "message": message,
         "parent_trade_id": parent_trade_id,
         "last_action_by": proposer_team,
-        "last_action_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat(),
+        "last_action_at": _utc_now_iso(),
+        "updated_at": _utc_now_iso(),
+        # Multi-step finalize fields (safe to include even if columns don’t exist yet)
+        "recipient_moves": None,
+        "proposer_moves": None,
+        "recipient_finalized": False,
+        "proposer_finalized": False,
     }
-    trade_resp = supabase.table("trades").insert(trade_row).execute()
+
+    trade_resp = _sb().table("trades").insert(trade_row).execute()
     trade_id = trade_resp.data[0]["id"]
 
     items = []
     for p in give_players:
-        items.append({
-            "trade_id": trade_id,
-            "from_team": proposer_team,
-            "to_team": recipient_team,
-            "player_name": p["Name"],
-            "player_team": p["team"],
-        })
+        items.append(
+            {
+                "trade_id": trade_id,
+                "from_team": proposer_team,
+                "to_team": recipient_team,
+                "player_name": p["Name"],
+                "player_team": p["team"],
+            }
+        )
     for p in receive_players:
-        items.append({
-            "trade_id": trade_id,
-            "from_team": recipient_team,
-            "to_team": proposer_team,
-            "player_name": p["Name"],
-            "player_team": p["team"],
-        })
+        items.append(
+            {
+                "trade_id": trade_id,
+                "from_team": recipient_team,
+                "to_team": proposer_team,
+                "player_name": p["Name"],
+                "player_team": p["team"],
+            }
+        )
 
     if items:
-        supabase.table("trade_players").insert(items).execute()
+        _sb().table("trade_players").insert(items).execute()
 
     return trade_id
-
-
-def load_trades_for_team(team_name: str):
-    """
-    Returns trades where team is proposer or recipient (most recent first).
-    """
-    resp = (
-        supabase.table("trades")
-        .select("*")
-        .or_(f"proposer_team.eq.{team_name},recipient_team.eq.{team_name}")
-        .order("created_at", desc=True)
-        .execute()
-    )
-    return pd.DataFrame(resp.data)
-
-
-def load_trade_players(trade_id: str):
-    resp = (
-        supabase.table("trade_players")
-        .select("*")
-        .eq("trade_id", trade_id)
-        .execute()
-    )
-    return pd.DataFrame(resp.data)
-
-
-def set_trade_status(trade_id: str, status: str, actor_team: str):
-    if status not in TRADE_STATUSES:
-        raise ValueError(f"Invalid trade status: {status}")
-
-    updates = {
-        "status": status,
-        "last_action_by": actor_team,
-        "last_action_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat(),
-    }
-    supabase.table("trades").update(updates).eq("id", trade_id).execute()
-
-
-def _pos_group(pos_val: str) -> str:
-    """
-    Normalize player positions into groups for lineup integrity.
-    Adjust if your Pos. values differ.
-    """
-    if not pos_val:
-        return "F"
-    p = str(pos_val).upper()
-    if "G" in p:
-        return "G"
-    if "D" in p:
-        return "D"
-    return "F"
-
-
-def _get_lineup_shape(team_name: str):
-    """
-    Returns (starter_total, starters_by_group) based on CURRENT lineup_state.
-    """
-    rows = supabase.table("lineup_state").select("*").eq("team_name", team_name).execute().data or []
-    starter_rows = [r for r in rows if r.get("player_pos") == "starter"]
-
-    starter_total = len(starter_rows)
-    starters_by_group = {}
-    for r in starter_rows:
-        g = _pos_group(r.get("Pos."))
-        starters_by_group[g] = starters_by_group.get(g, 0) + 1
-
-    return starter_total, starters_by_group
-
-
-def _fetch_roster_for_team(team_name: str):
-    """
-    Fetch current roster from players table. Must include Name, team, Pos.
-    Uses select('*') to avoid the Pos. select parsing issue.
-    """
-    roster = supabase.table("players").select("*").eq("held_by", team_name).execute().data or []
-    # normalize expected fields
-    out = []
-    for r in roster:
-        out.append({
-            "Name": r.get("Name"),
-            "team": r.get("team"),
-            "Pos.": r.get("Pos."),
-        })
-    # remove any weird nulls
-    out = [r for r in out if r["Name"] and r["team"]]
-    return out
-
-
-def _rebuild_lineup_state_to_shape(team_name: str, starter_total: int, starters_by_group: dict):
-    """
-    Rebuild lineup_state for team_name so starters match starter_total and starters_by_group.
-    Keeps existing starters where possible.
-    """
-    # Current lineup_state (for "keep starters" preference)
-    current = supabase.table("lineup_state").select("*").eq("team_name", team_name).execute().data or []
-    current_pos_by_name = {r["player_name"]: r.get("player_pos", "bench") for r in current if r.get("player_name")}
-
-    # Current roster after trade
-    roster = _fetch_roster_for_team(team_name)
-    if not roster:
-        # If team somehow has no players, clear lineup_state
-        supabase.table("lineup_state").delete().eq("team_name", team_name).execute()
-        return
-
-    # Build pools by group
-    by_group = {"F": [], "D": [], "G": []}
-    for p in roster:
-        g = _pos_group(p.get("Pos."))
-        by_group.setdefault(g, []).append(p)
-
-    # Prefer to keep people who were already starters
-    for g in by_group:
-        by_group[g].sort(key=lambda x: (current_pos_by_name.get(x["Name"]) != "starter", x["Name"]))
-
-    # Pick starters per group to match previous shape
-    starters = []
-    remaining = set((p["Name"], p["team"]) for p in roster)
-
-    for g, need in starters_by_group.items():
-        pool = by_group.get(g, [])
-        take = pool[: max(0, int(need))]
-        for p in take:
-            starters.append(p)
-            remaining.discard((p["Name"], p["team"]))
-
-    # If we still need more starters (e.g., shape didn’t cover all starter slots),
-    # fill with best available (prefer existing starters; else alphabetical).
-    if len(starters) < starter_total:
-        remaining_list = [p for p in roster if (p["Name"], p["team"]) in remaining]
-        remaining_list.sort(key=lambda x: (current_pos_by_name.get(x["Name"]) != "starter", x["Name"]))
-        needed = starter_total - len(starters)
-        starters.extend(remaining_list[:needed])
-        for p in remaining_list[:needed]:
-            remaining.discard((p["Name"], p["team"]))
-
-    starter_set = set((p["Name"], p["team"]) for p in starters)
-
-    # Rebuild ALL rows (simple + consistent). This guarantees Pos. and team are correct.
-    new_rows = []
-    for p in roster:
-        is_starter = (p["Name"], p["team"]) in starter_set
-        new_rows.append({
-            "team_name": team_name,
-            "player_name": p["Name"],
-            "player_pos": "starter" if is_starter else "bench",
-            "Pos.": p.get("Pos."),
-            "team": p.get("team"),
-        })
-
-    # Replace lineup_state for this team (safe if lineup_state only stores lineup info)
-    supabase.table("lineup_state").delete().eq("team_name", team_name).execute()
-    supabase.table("lineup_state").insert(new_rows).execute()
-
-
-def execute_trade(trade_id: str):
-    """
-    Execute trade and keep lineup_state integrity:
-      - preserve each team's starter counts + starter-by-group counts from before trade
-      - rebuild lineup_state after ownership changes
-    """
-    trade = supabase.table("trades").select("*").eq("id", trade_id).execute().data[0]
-    if trade["status"] != "PROPOSED":
-        raise ValueError(f"Trade is not PROPOSED (status={trade['status']}).")
-
-    items = load_trade_players(trade_id)
-    if items.empty:
-        raise ValueError("Trade has no players.")
-
-    team_a = trade["proposer_team"]
-    team_b = trade["recipient_team"]
-
-    # 1) Snapshot lineup shapes BEFORE trade
-    a_starter_total, a_by_group = _get_lineup_shape(team_a)
-    b_starter_total, b_by_group = _get_lineup_shape(team_b)
-
-    # 2) Verify ownership
-    problems = []
-    for _, row in items.iterrows():
-        name = row["player_name"]
-        pteam = row["player_team"]
-        from_team = row["from_team"]
-
-        current = (
-            supabase.table("players")
-            .select("Name, team, held_by")
-            .eq("Name", name)
-            .eq("team", pteam)
-            .execute()
-            .data
-        )
-        if not current:
-            problems.append(f"{name} ({pteam}) not found in players table.")
-            continue
-        if current[0].get("held_by") != from_team:
-            problems.append(
-                f"{name} ({pteam}) expected held_by={from_team}, but is held_by={current[0].get('held_by')}"
-            )
-
-    if problems:
-        raise ValueError("Cannot execute trade:\n- " + "\n- ".join(problems))
-
-    # 3) Apply ownership swaps
-    for _, row in items.iterrows():
-        supabase.table("players").update(
-            {"held_by": row["to_team"]}
-        ).eq("Name", row["player_name"]).eq("team", row["player_team"]).execute()
-
-    # 4) Rebuild lineup_state for both teams to match their prior shapes
-    _rebuild_lineup_state_to_shape(team_a, a_starter_total, a_by_group)
-    _rebuild_lineup_state_to_shape(team_b, b_starter_total, b_by_group)
 
 
 def counter_trade(
@@ -639,13 +520,10 @@ def counter_trade(
     actor_team: str,
     proposer_team: str,
     recipient_team: str,
-    give_players: List[Dict],
-    receive_players: List[Dict],
-    message: Optional[str] = None,
-):
-    """
-    Marks old trade COUNTERED and creates a new trade linked via parent_trade_id.
-    """
+    give_players: list[dict],
+    receive_players: list[dict],
+    message: str | None = None,
+) -> str:
     set_trade_status(old_trade_id, "COUNTERED", actor_team=actor_team)
     return create_trade(
         proposer_team=proposer_team,
@@ -656,330 +534,139 @@ def counter_trade(
         parent_trade_id=old_trade_id,
     )
 
+
+def load_trades_for_team(team_name: str) -> pd.DataFrame:
+    resp = (
+        _sb()
+        .table("trades")
+        .select("*")
+        .or_(f"proposer_team.eq.{team_name},recipient_team.eq.{team_name}")
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return pd.DataFrame(resp.data or [])
+
+
+def load_trade_players(trade_id: str) -> pd.DataFrame:
+    resp = _sb().table("trade_players").select("*").eq("trade_id", trade_id).execute()
+    return pd.DataFrame(resp.data or [])
+
+
+def get_trade(trade_id: str) -> dict[str, Any]:
+    return _sb().table("trades").select("*").eq("id", trade_id).execute().data[0]
+
+
+def set_trade_status(trade_id: str, status: str, actor_team: str):
+    if status not in TRADE_STATUSES:
+        raise ValueError(f"Invalid trade status: {status}")
+
+    updates = {
+        "status": status,
+        "last_action_by": actor_team,
+        "last_action_at": _utc_now_iso(),
+        "updated_at": _utc_now_iso(),
+    }
+    _sb().table("trades").update(updates).eq("id", trade_id).execute()
+
+
 # ===========================
-# ROSTER RULES
+# MULTI-STEP FINALIZE (no new table)
 # ===========================
-STARTERS_BY_GROUP = {"F": 6, "D": 4, "G": 2}  # change if needed
-ROSTER_TOTAL = 17
-STARTER_TOTAL = sum(STARTERS_BY_GROUP.values())
-BENCH_TOTAL = ROSTER_TOTAL - STARTER_TOTAL
-
-def _pos_group(pos_val: str) -> str:
-    """Map players['Pos.'] into F/D/G groups."""
-    if not pos_val:
-        return "F"
-    p = str(pos_val).upper()
-    # adjust mapping to match your Pos. strings
-    if "G" in p:
-        return "G"
-    if "D" in p:
-        return "D"
-    return "F"
-
-
-def _players_select_all_by_held(team_name: str):
-    # use select("*") to avoid PostgREST parsing issue with column "Pos."
-    return supabase.table("players").select("*").eq("held_by", team_name).execute().data or []
-
-
-def _free_agents_select_all(limit: int = 200):
-    # assumes unowned players have held_by null
-    return supabase.table("players").select("*").is_("held_by", "null").limit(limit).execute().data or []
-
-
-def _trade_items_df(trade_id: str):
-    return load_trade_players(trade_id)  # your existing helper returns a DataFrame
-
-
-def _simulate_post_trade_roster(team_name: str, trade_items_df):
-    """
-    Returns a list of player dicts (Name, team, Pos.) representing roster
-    after applying trade ownership changes (but before drops/pickups).
-    """
-    current = _players_select_all_by_held(team_name)
-
-    # index current roster by (Name, team)
-    roster_map = {(p.get("Name"), p.get("team")): p for p in current}
-
-    # remove outgoing
-    outgoing = trade_items_df[trade_items_df["from_team"] == team_name]
-    for _, r in outgoing.iterrows():
-        roster_map.pop((r["player_name"], r["player_team"]), None)
-
-    # add incoming (pull full player row so Pos. is present)
-    incoming = trade_items_df[trade_items_df["to_team"] == team_name]
-    for _, r in incoming.iterrows():
-        rec = (
-            supabase.table("players")
-            .select("*")
-            .eq("Name", r["player_name"])
-            .eq("team", r["player_team"])
-            .execute()
-            .data
-        )
-        if rec:
-            roster_map[(rec[0].get("Name"), rec[0].get("team"))] = rec[0]
-
-    # normalize output
-    out = []
-    for p in roster_map.values():
-        if p.get("Name") and p.get("team"):
-            out.append({"Name": p.get("Name"), "team": p.get("team"), "Pos.": p.get("Pos.")})
-    return out
-
-
-def _rebuild_lineup_state_fixed(team_name: str):
-    """
-    Force lineup_state to match fixed rules:
-      starters: 6F/4D/2G
-      bench: everyone else
-    Preference: keep existing starters when possible.
-    Also writes Pos. + team into lineup_state.
-    """
-    # current lineup_state to prefer keeping starters
-    current_ls = supabase.table("lineup_state").select("*").eq("team_name", team_name).execute().data or []
-    was_starter = {r.get("player_name"): (r.get("player_pos") == "starter") for r in current_ls}
-
-    roster = _players_select_all_by_held(team_name)
-    if not roster:
-        supabase.table("lineup_state").delete().eq("team_name", team_name).execute()
-        return
-
-    # build pools by group
-    pools = {"F": [], "D": [], "G": []}
-    for p in roster:
-        pools.setdefault(_pos_group(p.get("Pos.")), []).append(p)
-
-    # sort pools: starters first, then stable by name
-    for g in pools:
-        pools[g].sort(key=lambda x: (not was_starter.get(x.get("Name"), False), str(x.get("Name"))))
-
-    starters = []
-    starter_set = set()
-
-    # pick starters by required group counts
-    for g, need in STARTERS_BY_GROUP.items():
-        for p in pools.get(g, [])[:int(need)]:
-            starters.append(p)
-            starter_set.add((p.get("Name"), p.get("team")))
-
-    # (Optional) If roster is missing a group, you could fill with other players,
-    # but with your league roster constraints this should rarely happen.
-
-    # rebuild lineup_state rows for ALL rostered players
-    new_rows = []
-    for p in roster:
-        nm, tm = p.get("Name"), p.get("team")
-        pos_val = p.get("Pos.")
-        new_rows.append({
-            "team_name": team_name,
-            "player_name": nm,
-            "player_pos": "starter" if (nm, tm) in starter_set else "bench",
-            "Pos.": pos_val,
-            "team": tm,
-        })
-
-    supabase.table("lineup_state").delete().eq("team_name", team_name).execute()
-    supabase.table("lineup_state").insert(new_rows).execute()
-
-
-def execute_trade_balanced(trade_id: str, drops_by_team: dict, pickups_by_team: dict | None = None):
-    """
-    Executes trade AND enforces roster size = 17 via required drops (and optional pickups).
-    drops_by_team format: { "Team A": [{"Name":..., "team":...}, ...], "Team B": [...] }
-    pickups_by_team format: { "Team A": [{"Name":..., "team":...}], ... }  # optional, can be empty
-    """
-    pickups_by_team = pickups_by_team or {}
-
-    trade = supabase.table("trades").select("*").eq("id", trade_id).execute().data[0]
-    if trade["status"] != "PROPOSED":
-        raise ValueError(f"Trade is not PROPOSED (status={trade['status']}).")
-
-    items = _trade_items_df(trade_id)
-    if items.empty:
-        raise ValueError("Trade has no players.")
-
-    team_a = trade["proposer_team"]
-    team_b = trade["recipient_team"]
-
-    # 1) Verify ownership for traded players
-    problems = []
-    for _, row in items.iterrows():
-        current = (
-            supabase.table("players")
-            .select("Name, team, held_by")
-            .eq("Name", row["player_name"])
-            .eq("team", row["player_team"])
-            .execute()
-            .data
-        )
-        if not current:
-            problems.append(f'{row["player_name"]} ({row["player_team"]}) not found.')
-            continue
-        if current[0].get("held_by") != row["from_team"]:
-            problems.append(
-                f'{row["player_name"]} expected held_by={row["from_team"]}, '
-                f'but is held_by={current[0].get("held_by")}'
-            )
-    if problems:
-        raise ValueError("Cannot execute trade:\n- " + "\n- ".join(problems))
-
-    # 2) Validate roster counts after trade + drops/pickups
-    for tname in [team_a, team_b]:
-        post = _simulate_post_trade_roster(tname, items)
-
-        incoming = int((items["to_team"] == tname).sum())
-        outgoing = int((items["from_team"] == tname).sum())
-        current_count = len(_players_select_all_by_held(tname))
-        post_count = current_count + incoming - outgoing  # should match len(post)
-
-        req_drops = max(0, post_count - ROSTER_TOTAL)
-        open_slots = max(0, ROSTER_TOTAL - post_count)
-
-        chosen_drops = drops_by_team.get(tname, [])
-        chosen_picks = pickups_by_team.get(tname, [])
-
-        if len(chosen_drops) != req_drops:
-            raise ValueError(f"{tname} must drop exactly {req_drops} player(s) to accept this trade.")
-
-        if len(chosen_picks) > open_slots:
-            raise ValueError(f"{tname} can pick up at most {open_slots} player(s).")
-
-        # Ensure drop targets are in the post-trade roster
-        post_keys = {(p["Name"], p["team"]) for p in post}
-        for p in chosen_drops:
-            if (p["Name"], p["team"]) not in post_keys:
-                raise ValueError(f'{tname} drop selection includes non-rostered player: {p["Name"]} ({p["team"]})')
-
-        # Ensure pickups are actually free agents
-        for p in chosen_picks:
-            rec = (
-                supabase.table("players")
-                .select("held_by")
-                .eq("Name", p["Name"])
-                .eq("team", p["team"])
-                .execute()
-                .data
-            )
-            if not rec or rec[0].get("held_by") is not None:
-                raise ValueError(f'Pickup not available: {p["Name"]} ({p["team"]})')
-
-    # 3) Apply trade swaps
-    for _, row in items.iterrows():
-        supabase.table("players").update(
-            {"held_by": row["to_team"]}
-        ).eq("Name", row["player_name"]).eq("team", row["player_team"]).execute()
-
-    # 4) Apply drops (set held_by NULL + remove from lineup_state)
-    for tname, drops in drops_by_team.items():
-        for p in drops:
-            supabase.table("players").update({"held_by": None}).eq("Name", p["Name"]).eq("team", p["team"]).execute()
-            supabase.table("lineup_state").delete().eq("team_name", tname).eq("player_name", p["Name"]).execute()
-
-    # 5) Apply pickups (held_by team + add to lineup_state as bench for now; rebuild will finalize)
-    for tname, picks in pickups_by_team.items():
-        for p in picks:
-            # attach
-            supabase.table("players").update({"held_by": tname}).eq("Name", p["Name"]).eq("team", p["team"]).execute()
-            # get Pos. safely
-            prec = supabase.table("players").select("*").eq("Name", p["Name"]).eq("team", p["team"]).execute().data
-            pos_val = prec[0].get("Pos.") if prec else None
-            supabase.table("lineup_state").upsert({
-                "team_name": tname,
-                "player_name": p["Name"],
-                "player_pos": "bench",
-                "Pos.": pos_val,
-                "team": p["team"],
-            }).execute()
-
-    # 6) Rebuild lineup_state for both teams to fixed 6F/4D/2G starters
-    _rebuild_lineup_state_fixed(team_a)
-    _rebuild_lineup_state_fixed(team_b)
-
-
-def get_trade(trade_id: str):
-    return supabase.table("trades").select("*").eq("id", trade_id).execute().data[0]
-
-
-def save_finalize_moves(trade_id: str, team_role: str, drops: list[dict], pickups: list[dict]):
-    """
-    team_role: "recipient" or "proposer"
-    drops/pickups: [{"Name": "...", "team": "..."}, ...]
-    """
+def _save_finalize_moves(trade_id: str, role: str, drops: list[dict], pickups: list[dict]):
     payload = {"drops": drops or [], "pickups": pickups or []}
+    now = _utc_now_iso()
 
-    if team_role == "recipient":
-        supabase.table("trades").update({
-            "recipient_moves": payload,
-            "recipient_finalized": True,
-            "updated_at": datetime.utcnow().isoformat(),
-        }).eq("id", trade_id).execute()
-    elif team_role == "proposer":
-        supabase.table("trades").update({
-            "proposer_moves": payload,
-            "proposer_finalized": True,
-            "updated_at": datetime.utcnow().isoformat(),
-        }).eq("id", trade_id).execute()
+    if role == "recipient":
+        _sb().table("trades").update(
+            {
+                "recipient_moves": payload,
+                "recipient_finalized": True,
+                "updated_at": now,
+                "last_action_at": now,
+            }
+        ).eq("id", trade_id).execute()
+    elif role == "proposer":
+        _sb().table("trades").update(
+            {
+                "proposer_moves": payload,
+                "proposer_finalized": True,
+                "updated_at": now,
+                "last_action_at": now,
+            }
+        ).eq("id", trade_id).execute()
     else:
-        raise ValueError("team_role must be 'recipient' or 'proposer'")
+        raise ValueError("role must be 'recipient' or 'proposer'")
 
 
-def load_finalize_moves(trade_row: dict):
+def _load_moves(trade_row: dict) -> tuple[dict, dict]:
     rec = trade_row.get("recipient_moves") or {"drops": [], "pickups": []}
     pro = trade_row.get("proposer_moves") or {"drops": [], "pickups": []}
     return rec, pro
 
 
-ROSTER_TOTAL = 17
-
-def compute_trade_needs(trade_id: str):
+def compute_trade_needs(trade_id: str) -> dict[str, dict[str, int]]:
+    """
+    For each team: post_count after trade (before balancing), required_drops, open_slots
+    """
     trade = get_trade(trade_id)
     items = load_trade_players(trade_id)
 
-    teams = [trade["proposer_team"], trade["recipient_team"]]
-    out = {}
+    out: dict[str, dict[str, int]] = {}
+    for team_name in [trade["proposer_team"], trade["recipient_team"]]:
+        # count current roster size (len fallback is safer than relying on .count across client versions)
+        cur = _sb().table("players").select("Name").eq("held_by", team_name).execute().data or []
+        current_count = len(cur)
 
-    for tname in teams:
-        # current roster count
-        cnt = supabase.table("players").select("Name", count="exact").eq("held_by", tname).execute().count
-        incoming = int((items["to_team"] == tname).sum())
-        outgoing = int((items["from_team"] == tname).sum())
-        post_count = int(cnt) + incoming - outgoing
+        incoming = int((items["to_team"] == team_name).sum()) if not items.empty else 0
+        outgoing = int((items["from_team"] == team_name).sum()) if not items.empty else 0
+        post_count = current_count + incoming - outgoing
 
         required_drops = max(0, post_count - ROSTER_TOTAL)
         open_slots = max(0, ROSTER_TOTAL - post_count)
-
-        out[tname] = {"post_count": post_count, "required_drops": required_drops, "open_slots": open_slots}
+        out[team_name] = {
+            "post_count": int(post_count),
+            "required_drops": int(required_drops),
+            "open_slots": int(open_slots),
+        }
 
     return out
 
 
 def start_finalize(trade_id: str, actor_team: str):
+    """
+    Recipient clicks accept -> trade moves to FINALIZE_RECIPIENT and clears prior finalize data.
+    """
     trade = get_trade(trade_id)
     if trade["status"] != "PROPOSED":
         raise ValueError("Trade is not PROPOSED.")
     if actor_team != trade["recipient_team"]:
-        raise ValueError("Only the recipient can accept/start finalize.")
+        raise ValueError("Only the recipient can start finalize.")
 
-    supabase.table("trades").update({
-        "status": "FINALIZE_RECIPIENT",
-        "recipient_finalized": False,
-        "proposer_finalized": False,
-        "recipient_moves": None,
-        "proposer_moves": None,
-        "updated_at": datetime.utcnow().isoformat(),
-        "last_action_by": actor_team,
-        "last_action_at": datetime.utcnow().isoformat(),
-    }).eq("id", trade_id).execute()
+    now = _utc_now_iso()
+    _sb().table("trades").update(
+        {
+            "status": "FINALIZE_RECIPIENT",
+            "recipient_finalized": False,
+            "proposer_finalized": False,
+            "recipient_moves": None,
+            "proposer_moves": None,
+            "updated_at": now,
+            "last_action_by": actor_team,
+            "last_action_at": now,
+        }
+    ).eq("id", trade_id).execute()
 
 
-def submit_finalize_step(trade_id: str, actor_team: str, drops: list[dict], pickups: list[dict]):
+def submit_finalize_step(trade_id: str, actor_team: str, drops: list[dict], pickups: list[dict]) -> str:
+    """
+    Step 1: recipient submits -> status FINALIZE_PROPOSER
+    Step 2: proposer submits -> execute_trade_balanced + status ACCEPTED
+    """
     trade = get_trade(trade_id)
     proposer = trade["proposer_team"]
     recipient = trade["recipient_team"]
 
     needs = compute_trade_needs(trade_id)
-
     if actor_team == recipient:
         role = "recipient"
         required = needs[recipient]["required_drops"]
@@ -1000,36 +687,204 @@ def submit_finalize_step(trade_id: str, actor_team: str, drops: list[dict], pick
     if len(pickups) > open_slots:
         raise ValueError(f"{actor_team} can pick up at most {open_slots} player(s).")
 
-    save_finalize_moves(trade_id, role, drops, pickups)
+    _save_finalize_moves(trade_id, role, drops, pickups)
 
-    # Advance or execute
-    trade = get_trade(trade_id)  # refresh
-    rec_moves, pro_moves = load_finalize_moves(trade)
-
+    # advance or execute
+    now = _utc_now_iso()
     if trade["status"] == "FINALIZE_RECIPIENT":
-        supabase.table("trades").update({
-            "status": "FINALIZE_PROPOSER",
-            "updated_at": datetime.utcnow().isoformat(),
-            "last_action_by": actor_team,
-            "last_action_at": datetime.utcnow().isoformat(),
-        }).eq("id", trade_id).execute()
+        _sb().table("trades").update(
+            {
+                "status": "FINALIZE_PROPOSER",
+                "updated_at": now,
+                "last_action_by": actor_team,
+                "last_action_at": now,
+            }
+        ).eq("id", trade_id).execute()
         return "WAITING_ON_PROPOSER"
 
-    if trade["status"] == "FINALIZE_PROPOSER":
-        # Both sides now have moves stored on the trade row -> execute once
-        execute_trade_balanced(
-            trade_id,
-            drops_by_team={
-                recipient: rec_moves.get("drops", []),
-                proposer: pro_moves.get("drops", []),
-            },
-            pickups_by_team={
-                recipient: rec_moves.get("pickups", []),
-                proposer: pro_moves.get("pickups", []),
-            },
+    # proposer step -> execute once
+    trade2 = get_trade(trade_id)
+    rec_moves, pro_moves = _load_moves(trade2)
+
+    execute_trade_balanced(
+        trade_id,
+        drops_by_team={
+            recipient: rec_moves.get("drops", []),
+            proposer: pro_moves.get("drops", []),
+        },
+        pickups_by_team={
+            recipient: rec_moves.get("pickups", []),
+            proposer: pro_moves.get("pickups", []),
+        },
+    )
+    set_trade_status(trade_id, "ACCEPTED", actor_team=actor_team)
+    return "EXECUTED"
+
+
+# ===========================
+# EXECUTION: BALANCED TRADE + LINEUP REBUILD
+# ===========================
+def _pos_group(pos_val: str | None) -> str:
+    if not pos_val:
+        return "F"
+    p = str(pos_val).upper()
+    if "G" in p:
+        return "G"
+    if "D" in p:
+        return "D"
+    return "F"
+
+
+def _player_row(name: str, team: str) -> dict[str, Any] | None:
+    # select("*") avoids PostgREST parsing issue for "Pos."
+    data = _sb().table("players").select("*").eq("Name", name).eq("team", team).execute().data or []
+    return data[0] if data else None
+
+
+def _verify_trade_ownership(items: pd.DataFrame) -> None:
+    problems: list[str] = []
+    for _, row in items.iterrows():
+        rec = (
+            _sb()
+            .table("players")
+            .select("Name, team, held_by")
+            .eq("Name", row["player_name"])
+            .eq("team", row["player_team"])
+            .execute()
+            .data
         )
-        set_trade_status(trade_id, "ACCEPTED", actor_team=actor_team)
-        return "EXECUTED"
+        if not rec:
+            problems.append(f'{row["player_name"]} ({row["player_team"]}) not found.')
+            continue
+        if rec[0].get("held_by") != row["from_team"]:
+            problems.append(
+                f'{row["player_name"]} expected held_by={row["from_team"]}, but is held_by={rec[0].get("held_by")}'
+            )
+    if problems:
+        raise ValueError("Cannot execute trade:\n- " + "\n- ".join(problems))
 
-    raise ValueError("Unexpected trade status during finalize.")
 
+def _rebuild_lineup_state_fixed(team_name: str):
+    """
+    Force lineup_state to match fixed starters (6F/4D/2G) and bench for the rest.
+    Prefers keeping existing starters if possible.
+    Also ensures Pos. and team columns are correct.
+    """
+    # current lineup_state: prefer keeping starters
+    current_ls = _sb().table("lineup_state").select("*").eq("team_name", team_name).execute().data or []
+    was_starter = {r.get("player_name"): (r.get("player_pos") == "starter") for r in current_ls}
+
+    roster = _sb().table("players").select("*").eq("held_by", team_name).execute().data or []
+    if not roster:
+        _sb().table("lineup_state").delete().eq("team_name", team_name).execute()
+        return
+
+    pools: dict[str, list[dict]] = {"F": [], "D": [], "G": []}
+    for p in roster:
+        pools.setdefault(_pos_group(p.get("Pos.")), []).append(p)
+
+    # starters first, stable by name
+    for g in pools:
+        pools[g].sort(key=lambda x: (not was_starter.get(x.get("Name"), False), str(x.get("Name"))))
+
+    starter_keys: set[tuple[str, str]] = set()
+    for g, need in STARTERS_BY_GROUP.items():
+        for p in pools.get(g, [])[: int(need)]:
+            starter_keys.add((p.get("Name"), p.get("team")))
+
+    new_rows = []
+    for p in roster:
+        nm, tm = p.get("Name"), p.get("team")
+        new_rows.append(
+            {
+                "team_name": team_name,
+                "player_name": nm,
+                "player_pos": "starter" if (nm, tm) in starter_keys else "bench",
+                "Pos.": p.get("Pos."),
+                "team": tm,
+            }
+        )
+
+    # replace rows
+    _sb().table("lineup_state").delete().eq("team_name", team_name).execute()
+    _sb().table("lineup_state").insert(new_rows).execute()
+
+
+def execute_trade_balanced(
+    trade_id: str,
+    drops_by_team: dict[str, list[dict]],
+    pickups_by_team: dict[str, list[dict]] | None = None,
+):
+    """
+    Executes a trade AND enforces roster size 17 by requiring drops (and allowing optional pickups).
+    - Swaps players.held_by per trade_players
+    - Applies drops (held_by -> NULL) and removes from lineup_state
+    - Applies pickups (held_by -> team) and inserts into lineup_state as bench initially
+    - Rebuilds lineup_state for BOTH teams to fixed starter counts
+    """
+    pickups_by_team = pickups_by_team or {}
+
+    trade = get_trade(trade_id)
+    if trade["status"] not in ["FINALIZE_PROPOSER", "FINALIZE_RECIPIENT", "PROPOSED"]:
+        # We allow execution only from finalize states typically, but keep it permissive.
+        pass
+
+    items = load_trade_players(trade_id)
+    if items.empty:
+        raise ValueError("Trade has no players.")
+    _verify_trade_ownership(items)
+
+    proposer = trade["proposer_team"]
+    recipient = trade["recipient_team"]
+
+    # Validate drop/pick sizes vs computed needs
+    needs = compute_trade_needs(trade_id)
+    for team_name in [proposer, recipient]:
+        req = needs[team_name]["required_drops"]
+        open_slots = needs[team_name]["open_slots"]
+        drops = drops_by_team.get(team_name, [])
+        picks = pickups_by_team.get(team_name, [])
+        if len(drops) != req:
+            raise ValueError(f"{team_name} must drop exactly {req} player(s).")
+        if len(picks) > open_slots:
+            raise ValueError(f"{team_name} can pick up at most {open_slots} player(s).")
+
+    # 1) Apply ownership swaps
+    for _, row in items.iterrows():
+        _sb().table("players").update({"held_by": row["to_team"]}).eq("Name", row["player_name"]).eq(
+            "team", row["player_team"]
+        ).execute()
+
+    # 2) Drops
+    for team_name, drops in (drops_by_team or {}).items():
+        for p in drops:
+            _sb().table("players").update({"held_by": None}).eq("Name", p["Name"]).eq("team", p["team"]).execute()
+            _sb().table("lineup_state").delete().eq("team_name", team_name).eq("player_name", p["Name"]).execute()
+
+    # 3) Pickups
+    for team_name, picks in (pickups_by_team or {}).items():
+        for p in picks:
+            # confirm player is unowned
+            held = _sb().table("players").select("held_by").eq("Name", p["Name"]).eq("team", p["team"]).execute().data
+            if not held or held[0].get("held_by") is not None:
+                raise ValueError(f'Pickup not available: {p["Name"]} ({p["team"]})')
+
+            _sb().table("players").update({"held_by": team_name}).eq("Name", p["Name"]).eq("team", p["team"]).execute()
+
+            prec = _player_row(p["Name"], p["team"])
+            _sb().table("lineup_state").upsert(
+                {
+                    "team_name": team_name,
+                    "player_name": p["Name"],
+                    "player_pos": "bench",
+                    "Pos.": (prec.get("Pos.") if prec else None),
+                    "team": p["team"],
+                }
+            ).execute()
+
+    # 4) Rebuild lineup_state for both teams to fixed counts
+    _rebuild_lineup_state_fixed(proposer)
+    _rebuild_lineup_state_fixed(recipient)
+
+    # Clear cached loaders so UI refreshes after execution
+    st.cache_data.clear()
