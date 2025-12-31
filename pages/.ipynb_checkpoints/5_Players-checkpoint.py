@@ -147,7 +147,8 @@ st.session_state.drop_player = st.selectbox(
 )
 
 # ======================================================
-# EXECUTE ADD/DROP (updates players.held_by + lineup_state)
+# EXECUTE ADD/DROP
+# Default starter/bench of added player = whatever dropped player was
 # ======================================================
 if st.button("✅ Add & Drop Player"):
     if not st.session_state.add_player or not st.session_state.drop_player:
@@ -157,7 +158,23 @@ if st.button("✅ Add & Drop Player"):
     add_name = st.session_state.add_player.split(" - ")[0].strip()
     drop_name = st.session_state.drop_player.split(" - ")[0].strip()
 
+    # Grab the row for the player being added
     add_row = players.loc[players["Name"] == add_name].iloc[0]
+
+    # Determine dropped player's current lineup position (starter/bench)
+    # Prefer team_roster since it already has player_pos merged in
+    dropped_pos = "bench"
+    try:
+        dropped_pos = (
+            team_roster.loc[team_roster["Name"] == drop_name, "player_pos"]
+            .iloc[0]
+        )
+        if pd.isna(dropped_pos) or dropped_pos not in ("starter", "bench"):
+            dropped_pos = "bench"
+    except Exception:
+        dropped_pos = "bench"
+
+    starter_flag = (dropped_pos == "starter")
 
     db_utils.add_drop_player(
         team_name=my_team_name,
@@ -165,10 +182,13 @@ if st.button("✅ Add & Drop Player"):
         drop_player=drop_name,
         add_player_pos=add_row["Pos."],
         add_player_team=add_row["team"],
-        starter=False
+        starter=starter_flag,   # ✅ matches dropped player's slot
     )
 
-    st.success(f"✅ Added {add_name} and dropped {drop_name}")
+    st.success(
+        f"✅ Added {add_name} and dropped {drop_name} "
+        f"({add_name} set to {'starter' if starter_flag else 'bench'})"
+    )
 
     # Reset selections
     st.session_state.add_player = ""
