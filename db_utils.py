@@ -365,3 +365,168 @@ def load_players_for_team(team_name: str, batch_size=500, max_retries=3, delay=1
 
     return pd.DataFrame(all_rows)
 
+from typing import List, Dict, Optional
+from datetime import datetime
+
+# ======================================================
+# TRADES
+# ======================================================
+
+TRADE_STATUSES = ["PROPOSED", "ACCEPTED", "DECLINED", "COUNTERED", "CANCELLED"]
+
+def create_trade(
+    proposer_team: str,
+    recipient_team: str,
+    give_players: List[Dict],
+    receive_players: List[Dict],
+    message: Optional[str] = None,
+    parent_trade_id: Optional[str] = None,
+):
+    """
+    give_players/receive_players: list of dicts containing at least:
+      {"Name": "...", "team": "..."}  # 'team' here is the real team column in players table
+    """
+    trade_row = {
+        "proposer_team": proposer_team,
+        "recipient_team": recipient_team,
+        "status": "PROPOSED",
+        "message": message,
+        "parent_trade_id": parent_trade_id,
+        "last_action_by": proposer_team,
+        "last_action_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    trade_resp = supabase.table("trades").insert(trade_row).execute()
+    trade_id = trade_resp.data[0]["id"]
+
+    items = []
+    for p in give_players:
+        items.append({
+            "trade_id": trade_id,
+            "from_team": proposer_team,
+            "to_team": recipient_team,
+            "player_name": p["Name"],
+            "player_team": p["team"],
+        })
+    for p in receive_players:
+        items.append({
+            "trade_id": trade_id,
+            "from_team": recipient_team,
+            "to_team": proposer_team,
+            "player_name": p["Name"],
+            "player_team": p["team"],
+        })
+
+    if items:
+        supabase.table("trade_players").insert(items).execute()
+
+    return trade_id
+
+
+def load_trades_for_team(team_name: str):
+    """
+    Returns trades where team is proposer or recipient (most recent first).
+    """
+    resp = (
+        supabase.table("trades")
+        .select("*")
+        .or_(f"proposer_team.eq.{team_name},recipient_team.eq.{team_name}")
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return pd.DataFrame(resp.data)
+
+
+def load_trade_players(trade_id: str):
+    resp = (
+        supabase.table("trade_players")
+        .select("*")
+        .eq("trade_id", trade_id)
+        .execute()
+    )
+    return pd.DataFrame(resp.data)
+
+
+def set_trade_status(trade_id: str, status: str, actor_team: str):
+    if status not in TRADE_STATUSES:
+        raise ValueError(f"Invalid trade status: {status}")
+
+    updates = {
+        "status": status,
+        "last_action_by": actor_team,
+        "last_action_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    supabase.table("trades").update(updates).eq("id", trade_id).execute()
+
+
+def execute_trade(trade_id: str):
+    """
+    Executes the player ownership swaps if (and only if) all players are still on the expected teams.
+    Raises ValueError if any player ownership doesn't match what the trade expects.
+    """
+    # Fetch trade and items
+    trade = supabase.table("trades").select("*").eq("id", trade_id).execute().data[0]
+    if trade["status"] != "PROPOSED":
+        raise ValueError(f"Trade is not PROPOSED (status={trade['status']}).")
+
+    items = load_trade_players(trade_id)
+    if items.empty:
+        # Allow empty trades? Probably not, but handle safely:
+        raise ValueError("Trade has no players.")
+
+    # Verify ownership
+    problems = []
+    for _, row in items.iterrows():
+        name = row["player_name"]
+        pteam = row["player_team"]
+        from_team = row["from_team"]
+
+        current = (
+            supabase.table("players")
+            .select("Name, team, held_by")
+            .eq("Name", name)
+            .eq("team", pteam)
+            .execute()
+            .data
+        )
+        if not current:
+            problems.append(f"{name} ({pteam}) not found in players table.")
+            continue
+        if current[0].get("held_by") != from_team:
+            problems.append(
+                f"{name} ({pteam}) expected held_by={from_team}, "
+                f"but is held_by={current[0].get('held_by')}"
+            )
+
+    if problems:
+        raise ValueError("Cannot execute trade:\n- " + "\n- ".join(problems))
+
+    # Apply updates (swap ownership)
+    for _, row in items.iterrows():
+        supabase.table("players").update(
+            {"held_by": row["to_team"]}
+        ).eq("Name", row["player_name"]).eq("team", row["player_team"]).execute()
+
+
+def counter_trade(
+    old_trade_id: str,
+    actor_team: str,
+    proposer_team: str,
+    recipient_team: str,
+    give_players: List[Dict],
+    receive_players: List[Dict],
+    message: Optional[str] = None,
+):
+    """
+    Marks old trade COUNTERED and creates a new trade linked via parent_trade_id.
+    """
+    set_trade_status(old_trade_id, "COUNTERED", actor_team=actor_team)
+    return create_trade(
+        proposer_team=proposer_team,
+        recipient_team=recipient_team,
+        give_players=give_players,
+        receive_players=receive_players,
+        message=message,
+        parent_trade_id=old_trade_id,
+    )
