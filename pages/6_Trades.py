@@ -630,8 +630,6 @@ with c2:
 my_roster = players_display[players_display["held_by_norm"] == my_team].copy()
 partner_roster = players_display[players_display["held_by_norm"] == partner_team].copy()
 
-st.caption(f"{my_team} roster rows: {len(my_roster)} (should be {ROSTER_TOTAL})")
-
 give_players = selectable_editor(my_roster, key="give_editor", checkbox_label="Send", title=f"{my_team} roster (SEND)")
 st.divider()
 receive_players = selectable_editor(partner_roster, key="recv_editor", checkbox_label="Receive", title=f"{partner_team} roster (RECEIVE)")
@@ -920,7 +918,7 @@ for _, t in trades_df.iterrows():
             st.divider()
             ctr_recv = selectable_editor(their_roster2, key=f"ctr_recv_{trade_id}", checkbox_label="Receive", title=f"{new_recipient} roster (RECEIVE)")
 
-            ctr_msg = st.text_input("Counter message (optional)", key=f"ctr_msg_{trade_id}")
+
 
             cbtn1, cbtn2 = st.columns(2)
             if cbtn1.button("📨 Submit Counter", key=f"ctr_submit_{trade_id}", disabled=(len(ctr_give) + len(ctr_recv) == 0)):
