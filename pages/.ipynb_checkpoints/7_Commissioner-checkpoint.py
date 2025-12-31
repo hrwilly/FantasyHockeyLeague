@@ -5,6 +5,30 @@ import db_utils
 st.title("🏆 Commissioner Tools")
 
 # ======================================================
+# SIDEBAR: DRY RUN MODE
+# ======================================================
+with st.sidebar:
+    DRY_RUN = st.toggle("🧪 Dry run (no DB writes)", value=True)
+    st.caption("When enabled, buttons will compute + preview, but NOT write to Supabase.")
+
+def maybe_write(label: str, fn, *args, preview_df: pd.DataFrame | None = None, success_msg: str | None = None, **kwargs):
+    """
+    If DRY_RUN is on: show preview + skip DB write.
+    Else: call the DB write function.
+    """
+    if DRY_RUN:
+        st.info(f"DRY RUN: would execute **{label}** (skipped).")
+        if preview_df is not None and isinstance(preview_df, pd.DataFrame):
+            st.write("Preview (first 50 rows):")
+            st.dataframe(preview_df.head(50), use_container_width=True)
+        return None
+
+    out = fn(*args, **kwargs)
+    if success_msg:
+        st.success(success_msg)
+    return out
+
+# ======================================================
 # WEEK / DAY SELECTION
 # ======================================================
 selected_week = st.selectbox("Select Week", list(range(1, 16)))
@@ -26,8 +50,14 @@ st.warning(
 )
 
 if st.button("🔒 Lock Lineups for Week"):
-    db_utils.lock_weekly_rosters(selected_week)
-    st.success(f"✅ Lineups locked for Week {selected_week}")
+    # We can't preview rows without re-implementing lock_weekly_rosters logic here,
+    # but we can still safely dry-run the write call.
+    maybe_write(
+        label=f"lock_weekly_rosters(week={selected_week})",
+        fn=db_utils.lock_weekly_rosters,
+        week=selected_week,
+        success_msg=f"✅ Lineups locked for Week {selected_week}"
+    )
 
 st.divider()
 
@@ -56,7 +86,11 @@ def get_current_data(team):
     goalies[["Name", "Yr"]] = goalies["Name, Yr"].str.split(",", expand=True)
 
     stats = pd.merge(offense, goalies, on=["Name", "Yr"], how="outer", suffixes=("_off", "_goal"))
-    stats["GP"] = stats.get("GP_off", pd.Series(dtype=float)).fillna(stats.get("GP_goal", pd.Series(dtype=float)))
+
+    # GP is in both tables with suffixes; prefer offense then goalie
+    gp_off = stats["GP_off"] if "GP_off" in stats.columns else pd.Series(dtype=float)
+    gp_goal = stats["GP_goal"] if "GP_goal" in stats.columns else pd.Series(dtype=float)
+    stats["GP"] = gp_off.fillna(gp_goal)
     stats = stats.drop(columns=["GP_off", "GP_goal"], errors="ignore")
 
     for col in [
@@ -133,19 +167,35 @@ if st.button("🏁 Run Weekly Scoring"):
     st.dataframe(weekly_scored, use_container_width=True)
 
 # ======================================================
-# SAVE WEEKLY SCORING
+# SAVE WEEKLY SCORING (DRY RUN SAFE)
 # ======================================================
 if "weekly_scored" in st.session_state and st.button("💾 Save Weekly Scoring"):
-    points = (
+    points_df = (
         st.session_state["weekly_scored"]
         .reset_index()[["Name", "team", "FantasyPoints"]]
     )
-    points = points[points["FantasyPoints"] != 0]
+    points_df = points_df[points_df["FantasyPoints"] != 0].copy()
 
-    db_utils.save_weekly_points(points, selected_week, selected_day)
-    db_utils.save_last_week_stats(st.session_state["current_cum"])
+    maybe_write(
+        label=f"save_weekly_points(week={selected_week}, day={selected_day})",
+        fn=db_utils.save_weekly_points,
+        preview_df=points_df,
+        points=points_df,
+        week=selected_week,
+        day=selected_day,
+        success_msg="✅ Weekly points saved"
+    )
 
-    st.success("✅ Weekly scoring saved")
+    # Preview current_cum too (it may be large)
+    current_cum_df = st.session_state["current_cum"].reset_index()
+
+    maybe_write(
+        label="save_last_week_stats(current_cum)",
+        fn=db_utils.save_last_week_stats,
+        preview_df=current_cum_df,
+        df=st.session_state["current_cum"],
+        success_msg="✅ last_week_stats updated"
+    )
 
 st.divider()
 
@@ -202,14 +252,27 @@ if st.button("🏁 Run Matchups"):
         week_matchups.loc[i, "home_team_points"] = round(float(home_pts), 1)
         week_matchups.loc[i, "away_team_points"] = round(float(away_pts), 1)
 
-    db_utils.save_weekly_matchups(week_matchups, selected_week)
-    st.success("✅ Matchups saved")
+    st.session_state["week_matchups_preview"] = week_matchups
+
+    st.success("✅ Matchups computed")
     st.dataframe(week_matchups, use_container_width=True)
+
+# Save matchups (separate button so you can preview first)
+if "week_matchups_preview" in st.session_state and st.button("💾 Save Matchups"):
+    week_matchups = st.session_state["week_matchups_preview"].copy()
+    maybe_write(
+        label=f"save_weekly_matchups(week={selected_week})",
+        fn=db_utils.save_weekly_matchups,
+        preview_df=week_matchups,
+        week_matchups=week_matchups,
+        week=selected_week,
+        success_msg="✅ Matchups saved"
+    )
 
 st.divider()
 
 # ======================================================
-# UPDATE STANDINGS
+# UPDATE STANDINGS (DRY RUN SAFE)
 # ======================================================
 st.subheader("📊 Update Standings")
 
@@ -218,41 +281,51 @@ if st.button("💾 Save Matchup Results"):
     matchups_df = db_utils.load_matchups()
     week_matchups = matchups_df[matchups_df["week"] == selected_week].copy()
 
-    # week_matchups should already have points after save_weekly_matchups
-    # If not, this will still work but won't change records meaningfully
+    # If points were saved into matchups table, these should exist
+    if "home_team_points" not in week_matchups.columns or "away_team_points" not in week_matchups.columns:
+        st.warning("Matchups table doesn't have saved points columns yet. Run + Save Matchups first.")
+        st.stop()
+
+    updated = teams_df.copy()
+
     for _, row in week_matchups.iterrows():
         home, away = row["home_team"], row["away_team"]
-        hp, ap = float(row.get("home_team_points", 0.0)), float(row.get("away_team_points", 0.0))
+        hp, ap = float(row["home_team_points"]), float(row["away_team_points"])
 
         if hp > ap:
-            teams_df.loc[teams_df["team_name"] == home, "W"] += 1
-            teams_df.loc[teams_df["team_name"] == away, "L"] += 1
+            updated.loc[updated["team_name"] == home, "W"] += 1
+            updated.loc[updated["team_name"] == away, "L"] += 1
         elif ap > hp:
-            teams_df.loc[teams_df["team_name"] == away, "W"] += 1
-            teams_df.loc[teams_df["team_name"] == home, "L"] += 1
+            updated.loc[updated["team_name"] == away, "W"] += 1
+            updated.loc[updated["team_name"] == home, "L"] += 1
 
-        teams_df.loc[teams_df["team_name"] == home, ["PF", "PA"]] += [hp, ap]
-        teams_df.loc[teams_df["team_name"] == away, ["PF", "PA"]] += [ap, hp]
+        updated.loc[updated["team_name"] == home, ["PF", "PA"]] += [hp, ap]
+        updated.loc[updated["team_name"] == away, ["PF", "PA"]] += [ap, hp]
 
-    teams_df = teams_df.sort_values(["W", "L", "PF"], ascending=[False, True, False]).reset_index(drop=True)
-    teams_df["Place"] = range(1, len(teams_df) + 1)
+    updated = updated.sort_values(["W", "L", "PF"], ascending=[False, True, False]).reset_index(drop=True)
+    updated["Place"] = range(1, len(updated) + 1)
 
-    for _, r in teams_df.iterrows():
-        db_utils.update_team_record(
-            r["team_name"],
-            int(r["W"]),
-            int(r["L"]),
-            float(r["PF"]),
-            float(r["PA"]),
-            int(r["Place"]),
-        )
+    st.write("Preview updated standings:")
+    st.dataframe(updated, use_container_width=True)
 
-    st.success(f"✅ Week {selected_week} processed successfully!")
+    if DRY_RUN:
+        st.info("DRY RUN: would update team records in database (skipped).")
+    else:
+        for _, r in updated.iterrows():
+            db_utils.update_team_record(
+                r["team_name"],
+                int(r["W"]),
+                int(r["L"]),
+                float(r["PF"]),
+                float(r["PA"]),
+                int(r["Place"]),
+            )
+        st.success(f"✅ Week {selected_week} processed successfully!")
 
 st.divider()
 
 # ======================================================
-# OFF-WEEK UPDATE
+# OFF-WEEK UPDATE (DRY RUN SAFE)
 # ======================================================
 st.subheader("🏁 Run off-week")
 
@@ -266,5 +339,13 @@ if st.button("🏁 Run off-week"):
         except Exception as e:
             st.warning(f"Skipping {team}: {e}")
 
-    db_utils.save_last_week_stats(current_cum)
-    st.success("✅ Updated stats between weeks.")
+    st.write("Preview (first 50) of cumulative stats that would be saved to last_week_stats:")
+    st.dataframe(current_cum.reset_index().head(50), use_container_width=True)
+
+    maybe_write(
+        label="save_last_week_stats(current_cum)",
+        fn=db_utils.save_last_week_stats,
+        preview_df=current_cum.reset_index(),
+        df=current_cum,
+        success_msg="✅ Updated stats between weeks."
+    )
