@@ -66,37 +66,6 @@ players_pts["CumulativePts"] = players_pts["CumulativePts"].fillna(0.0).astype(f
 # ----------------------------
 roster_template = {"F": 6, "D": 4, "G": 2}
 
-if lineup_state is None or lineup_state.empty:
-    team_players = players_pts[players_pts["held_by"] == selected_team].copy()
-
-    lineup_rows = []
-    pos_counts = {pos: 0 for pos in roster_template}
-
-    # deterministic ordering to avoid “random starters”
-    team_players = team_players.sort_values(by=["Pos.", "Name"], ascending=[True, True])
-
-    for _, row in team_players.iterrows():
-        pos = row["Pos."]
-
-        if pos in roster_template and pos_counts[pos] < roster_template[pos]:
-            player_pos = "starter"
-            pos_counts[pos] += 1
-        else:
-            player_pos = "bench"
-
-        lineup_rows.append({
-            "team_name": selected_team,
-            "player_name": row["Name"],
-            "player_pos": player_pos,
-            "Pos.": pos,
-            "team": row["team"],
-        })
-
-    if lineup_rows:
-        db_utils.save_lineup_state(lineup_rows)
-
-    lineup_state = db_utils.load_lineup_state(selected_team)
-
 # ----------------------------
 # Merge lineup_state with full player columns
 #   lineup_state has: team_name, player_name, player_pos, Pos., team
@@ -145,13 +114,8 @@ else:
 player_cols = list(players_pts.columns)
 
 # Move Name/team/Pos. toward the front for readability
-front = [c for c in ["Name", "Pos.", "team", "held_by", "WeeklyPts", "CumulativePts"] if c in player_cols]
-rest = [c for c in player_cols if c not in front]
-display_cols = front + rest
-
-# Remove held_by from display if you don’t want it visible (optional)
-# If you truly want *every* players col shown, keep it.
-# display_cols = [c for c in display_cols if c != "held_by"]
+front = [c for c in ["Name", "Pos.", "team", "WeeklyPts", "CumulativePts"] if c in player_cols]
+display_cols = front
 
 st.markdown("### Starters")
 if starters.empty:
@@ -189,7 +153,7 @@ else:
     st.dataframe(
         bench_view.style.format(fmt_cols, na_rep=""),
         use_container_width=True,
-        height=420
+        height=200
     )
 
 # ----------------------------
