@@ -41,7 +41,6 @@ if teams.empty:
     st.stop()
 
 # Merge last_week_stats onto players so we can display all stat columns
-# last_week_stats is expected to have Name, team + stat cols
 if stats is not None and not stats.empty:
     players = players.merge(stats, on=["Name", "team"], how="left")
 
@@ -63,35 +62,42 @@ players["player_pos"] = players["player_pos"].fillna("bench")
 
 # ======================================================
 # DISPLAY: TEAM ROSTER (WITH ALL STATS COLS)
+# Remove held_by from display
 # ======================================================
 st.subheader(f"{my_team_name}'s Current Roster")
 
 team_roster = players[players["held_by"] == my_team_name].copy()
 
-# Put player_pos near the front for readability
 front_cols = [c for c in ["Name", "Pos.", "team", "player_pos"] if c in team_roster.columns]
-rest_cols = [c for c in team_roster.columns if c not in front_cols and c != "player_name"]
+rest_cols = [
+    c for c in team_roster.columns
+    if c not in front_cols and c not in ["player_name", "held_by"]
+]
 roster_display_cols = front_cols + rest_cols
 
 if team_roster.empty:
     st.info("No players on roster yet.")
 else:
     st.dataframe(
-        team_roster[roster_display_cols]
-        .set_index(["Name", "team", "Pos."]),
+        team_roster[roster_display_cols].set_index(["Name", "team", "Pos."]),
         use_container_width=True,
         height=480
     )
 
 # ======================================================
 # DISPLAY: FREE AGENTS (WITH ALL STATS COLS)
+# Remove held_by + player_pos from display
 # ======================================================
 st.subheader("Available Free Agents")
 
 free_agents = players[players["held_by"].isna()].copy()
 
 fa_front = [c for c in ["Name", "Pos.", "team"] if c in free_agents.columns]
-fa_rest = [c for c in free_agents.columns if c not in fa_front and c != "player_name"]
+fa_rest = [
+    c for c in free_agents.columns
+    if c not in fa_front
+    and c not in ["player_name", "held_by", "player_pos"]
+]
 fa_display_cols = fa_front + fa_rest
 
 st.dataframe(
@@ -113,7 +119,6 @@ if "drop_player" not in st.session_state:
 
 def format_options(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
-    # keep dropdown compact even with many stat columns
     out["display"] = (
         out["Name"].astype(str) + " - "
         + out["Pos."].astype(str) + " - "
