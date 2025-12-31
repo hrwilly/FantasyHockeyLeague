@@ -21,6 +21,10 @@ def load_players_for_team_cached(team_name: str):
 def load_points_cached():
     return db_utils.load_points()
 
+@st.cache_data(ttl=120, show_spinner=False)
+def load_last_week_stats_cached():
+    return db_utils.load_last_week_stats()
+
 @st.cache_data(ttl=2, show_spinner=False)
 def load_lineup_state_cached(team_name: str):
     # Requires db_utils.load_lineup_state(team_name)
@@ -42,20 +46,30 @@ if teams.empty:
 selected_team = st.selectbox("Select your team:", teams["team_name"])
 
 # ======================================================
-# LOAD TEAM PLAYERS / POINTS / LINEUP_STATE
+# TOGGLE: SHOW STATS COLUMNS
+# (Put this near the top so it doesn't move around)
+# ======================================================
+show_stats = st.toggle("Show last week stats columns", value=True)
+
+# ======================================================
+# LOAD TEAM PLAYERS / POINTS / STATS / LINEUP_STATE
 # ======================================================
 players_team = load_players_for_team_cached(selected_team)
 points = load_points_cached()
+stats = load_last_week_stats_cached()
 lineup_state = load_lineup_state_cached(selected_team)
+
+# Merge last_week_stats onto this team's players
+if stats is not None and not stats.empty:
+    players_team = players_team.merge(stats, on=["Name", "team"], how="left")
 
 # ======================================================
 # Compute WeeklyPts + CumulativePts for THIS TEAM ONLY
 # ======================================================
-players_pts = players_team[["Name", "Pos.", "team"]].copy()
+players_pts = players_team.copy()
+players_pts = players_pts.drop(columns=["WeeklyPts", "CumulativePts"], errors="ignore")
 
 latest_week = None
-players_pts["WeeklyPts"] = 0.0
-players_pts["CumulativePts"] = 0.0
 
 if points is not None and not points.empty and "Week" in points.columns:
     latest_week = int(points["Week"].max())
@@ -77,14 +91,14 @@ if points is not None and not points.empty and "Week" in points.columns:
             .rename(columns={"FantasyPoints": "CumulativePts"})
         )
 
-        players_pts = players_pts.drop(columns=["WeeklyPts", "CumulativePts"], errors="ignore")
         players_pts = players_pts.merge(weekly_total, on=["Name", "team"], how="left")
         players_pts = players_pts.merge(cumulative, on=["Name", "team"], how="left")
 
-        if "WeeklyPts" not in players_pts.columns:
-            players_pts["WeeklyPts"] = 0.0
-        if "CumulativePts" not in players_pts.columns:
-            players_pts["CumulativePts"] = 0.0
+# Ensure columns always exist
+if "WeeklyPts" not in players_pts.columns:
+    players_pts["WeeklyPts"] = 0.0
+if "CumulativePts" not in players_pts.columns:
+    players_pts["CumulativePts"] = 0.0
 
 players_pts["WeeklyPts"] = players_pts["WeeklyPts"].fillna(0.0).astype(float).round(1)
 players_pts["CumulativePts"] = players_pts["CumulativePts"].fillna(0.0).astype(float).round(1)
@@ -121,7 +135,7 @@ if lineup_state is None or lineup_state.empty:
     lineup_state = load_lineup_state_cached(selected_team)
 
 # ======================================================
-# Merge lineup_state + the slim display columns
+# Merge lineup_state + player data (avoid Pos./team collisions)
 # ======================================================
 lineup_state_small = lineup_state[["team_name", "player_name", "player_pos"]].copy()
 
@@ -143,7 +157,12 @@ starters["__pos_order"] = starters[pos_col].map(pos_order).fillna(999).astype(in
 starters = starters.sort_values(by=["__pos_order", pos_col, "Name"]).drop(columns="__pos_order")
 bench = bench.sort_values(by=[pos_col, "Name"])
 
-display_cols = ["Name", "Pos.", "team", "WeeklyPts", "CumulativePts"]
+# ======================================================
+# Display columns: base + last_week_stats stat columns (toggle)
+# ======================================================
+base_cols = ["Name", "Pos.", "team", "WeeklyPts", "CumulativePts"]
+stat_cols = [c for c in stats.columns if c not in ["Name", "team"]] if stats is not None and not stats.empty else []
+display_cols = base_cols + stat_cols if show_stats else base_cols
 
 # ======================================================
 # Display stacked tables
