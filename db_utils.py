@@ -655,3 +655,244 @@ def counter_trade(
         message=message,
         parent_trade_id=old_trade_id,
     )
+
+# ===========================
+# ROSTER RULES
+# ===========================
+STARTERS_BY_GROUP = {"F": 6, "D": 4, "G": 2}  # change if needed
+ROSTER_TOTAL = 17
+STARTER_TOTAL = sum(STARTERS_BY_GROUP.values())
+BENCH_TOTAL = ROSTER_TOTAL - STARTER_TOTAL
+
+def _pos_group(pos_val: str) -> str:
+    """Map players['Pos.'] into F/D/G groups."""
+    if not pos_val:
+        return "F"
+    p = str(pos_val).upper()
+    # adjust mapping to match your Pos. strings
+    if "G" in p:
+        return "G"
+    if "D" in p:
+        return "D"
+    return "F"
+
+
+def _players_select_all_by_held(team_name: str):
+    # use select("*") to avoid PostgREST parsing issue with column "Pos."
+    return supabase.table("players").select("*").eq("held_by", team_name).execute().data or []
+
+
+def _free_agents_select_all(limit: int = 200):
+    # assumes unowned players have held_by null
+    return supabase.table("players").select("*").is_("held_by", "null").limit(limit).execute().data or []
+
+
+def _trade_items_df(trade_id: str):
+    return load_trade_players(trade_id)  # your existing helper returns a DataFrame
+
+
+def _simulate_post_trade_roster(team_name: str, trade_items_df):
+    """
+    Returns a list of player dicts (Name, team, Pos.) representing roster
+    after applying trade ownership changes (but before drops/pickups).
+    """
+    current = _players_select_all_by_held(team_name)
+
+    # index current roster by (Name, team)
+    roster_map = {(p.get("Name"), p.get("team")): p for p in current}
+
+    # remove outgoing
+    outgoing = trade_items_df[trade_items_df["from_team"] == team_name]
+    for _, r in outgoing.iterrows():
+        roster_map.pop((r["player_name"], r["player_team"]), None)
+
+    # add incoming (pull full player row so Pos. is present)
+    incoming = trade_items_df[trade_items_df["to_team"] == team_name]
+    for _, r in incoming.iterrows():
+        rec = (
+            supabase.table("players")
+            .select("*")
+            .eq("Name", r["player_name"])
+            .eq("team", r["player_team"])
+            .execute()
+            .data
+        )
+        if rec:
+            roster_map[(rec[0].get("Name"), rec[0].get("team"))] = rec[0]
+
+    # normalize output
+    out = []
+    for p in roster_map.values():
+        if p.get("Name") and p.get("team"):
+            out.append({"Name": p.get("Name"), "team": p.get("team"), "Pos.": p.get("Pos.")})
+    return out
+
+
+def _rebuild_lineup_state_fixed(team_name: str):
+    """
+    Force lineup_state to match fixed rules:
+      starters: 6F/4D/2G
+      bench: everyone else
+    Preference: keep existing starters when possible.
+    Also writes Pos. + team into lineup_state.
+    """
+    # current lineup_state to prefer keeping starters
+    current_ls = supabase.table("lineup_state").select("*").eq("team_name", team_name).execute().data or []
+    was_starter = {r.get("player_name"): (r.get("player_pos") == "starter") for r in current_ls}
+
+    roster = _players_select_all_by_held(team_name)
+    if not roster:
+        supabase.table("lineup_state").delete().eq("team_name", team_name).execute()
+        return
+
+    # build pools by group
+    pools = {"F": [], "D": [], "G": []}
+    for p in roster:
+        pools.setdefault(_pos_group(p.get("Pos.")), []).append(p)
+
+    # sort pools: starters first, then stable by name
+    for g in pools:
+        pools[g].sort(key=lambda x: (not was_starter.get(x.get("Name"), False), str(x.get("Name"))))
+
+    starters = []
+    starter_set = set()
+
+    # pick starters by required group counts
+    for g, need in STARTERS_BY_GROUP.items():
+        for p in pools.get(g, [])[:int(need)]:
+            starters.append(p)
+            starter_set.add((p.get("Name"), p.get("team")))
+
+    # (Optional) If roster is missing a group, you could fill with other players,
+    # but with your league roster constraints this should rarely happen.
+
+    # rebuild lineup_state rows for ALL rostered players
+    new_rows = []
+    for p in roster:
+        nm, tm = p.get("Name"), p.get("team")
+        pos_val = p.get("Pos.")
+        new_rows.append({
+            "team_name": team_name,
+            "player_name": nm,
+            "player_pos": "starter" if (nm, tm) in starter_set else "bench",
+            "Pos.": pos_val,
+            "team": tm,
+        })
+
+    supabase.table("lineup_state").delete().eq("team_name", team_name).execute()
+    supabase.table("lineup_state").insert(new_rows).execute()
+
+
+def execute_trade_balanced(trade_id: str, drops_by_team: dict, pickups_by_team: dict | None = None):
+    """
+    Executes trade AND enforces roster size = 17 via required drops (and optional pickups).
+    drops_by_team format: { "Team A": [{"Name":..., "team":...}, ...], "Team B": [...] }
+    pickups_by_team format: { "Team A": [{"Name":..., "team":...}], ... }  # optional, can be empty
+    """
+    pickups_by_team = pickups_by_team or {}
+
+    trade = supabase.table("trades").select("*").eq("id", trade_id).execute().data[0]
+    if trade["status"] != "PROPOSED":
+        raise ValueError(f"Trade is not PROPOSED (status={trade['status']}).")
+
+    items = _trade_items_df(trade_id)
+    if items.empty:
+        raise ValueError("Trade has no players.")
+
+    team_a = trade["proposer_team"]
+    team_b = trade["recipient_team"]
+
+    # 1) Verify ownership for traded players
+    problems = []
+    for _, row in items.iterrows():
+        current = (
+            supabase.table("players")
+            .select("Name, team, held_by")
+            .eq("Name", row["player_name"])
+            .eq("team", row["player_team"])
+            .execute()
+            .data
+        )
+        if not current:
+            problems.append(f'{row["player_name"]} ({row["player_team"]}) not found.')
+            continue
+        if current[0].get("held_by") != row["from_team"]:
+            problems.append(
+                f'{row["player_name"]} expected held_by={row["from_team"]}, '
+                f'but is held_by={current[0].get("held_by")}'
+            )
+    if problems:
+        raise ValueError("Cannot execute trade:\n- " + "\n- ".join(problems))
+
+    # 2) Validate roster counts after trade + drops/pickups
+    for tname in [team_a, team_b]:
+        post = _simulate_post_trade_roster(tname, items)
+
+        incoming = int((items["to_team"] == tname).sum())
+        outgoing = int((items["from_team"] == tname).sum())
+        current_count = len(_players_select_all_by_held(tname))
+        post_count = current_count + incoming - outgoing  # should match len(post)
+
+        req_drops = max(0, post_count - ROSTER_TOTAL)
+        open_slots = max(0, ROSTER_TOTAL - post_count)
+
+        chosen_drops = drops_by_team.get(tname, [])
+        chosen_picks = pickups_by_team.get(tname, [])
+
+        if len(chosen_drops) != req_drops:
+            raise ValueError(f"{tname} must drop exactly {req_drops} player(s) to accept this trade.")
+
+        if len(chosen_picks) > open_slots:
+            raise ValueError(f"{tname} can pick up at most {open_slots} player(s).")
+
+        # Ensure drop targets are in the post-trade roster
+        post_keys = {(p["Name"], p["team"]) for p in post}
+        for p in chosen_drops:
+            if (p["Name"], p["team"]) not in post_keys:
+                raise ValueError(f'{tname} drop selection includes non-rostered player: {p["Name"]} ({p["team"]})')
+
+        # Ensure pickups are actually free agents
+        for p in chosen_picks:
+            rec = (
+                supabase.table("players")
+                .select("held_by")
+                .eq("Name", p["Name"])
+                .eq("team", p["team"])
+                .execute()
+                .data
+            )
+            if not rec or rec[0].get("held_by") is not None:
+                raise ValueError(f'Pickup not available: {p["Name"]} ({p["team"]})')
+
+    # 3) Apply trade swaps
+    for _, row in items.iterrows():
+        supabase.table("players").update(
+            {"held_by": row["to_team"]}
+        ).eq("Name", row["player_name"]).eq("team", row["player_team"]).execute()
+
+    # 4) Apply drops (set held_by NULL + remove from lineup_state)
+    for tname, drops in drops_by_team.items():
+        for p in drops:
+            supabase.table("players").update({"held_by": None}).eq("Name", p["Name"]).eq("team", p["team"]).execute()
+            supabase.table("lineup_state").delete().eq("team_name", tname).eq("player_name", p["Name"]).execute()
+
+    # 5) Apply pickups (held_by team + add to lineup_state as bench for now; rebuild will finalize)
+    for tname, picks in pickups_by_team.items():
+        for p in picks:
+            # attach
+            supabase.table("players").update({"held_by": tname}).eq("Name", p["Name"]).eq("team", p["team"]).execute()
+            # get Pos. safely
+            prec = supabase.table("players").select("*").eq("Name", p["Name"]).eq("team", p["team"]).execute().data
+            pos_val = prec[0].get("Pos.") if prec else None
+            supabase.table("lineup_state").upsert({
+                "team_name": tname,
+                "player_name": p["Name"],
+                "player_pos": "bench",
+                "Pos.": pos_val,
+                "team": p["team"],
+            }).execute()
+
+    # 6) Rebuild lineup_state for both teams to fixed 6F/4D/2G starters
+    _rebuild_lineup_state_fixed(team_a)
+    _rebuild_lineup_state_fixed(team_b)
+
