@@ -51,18 +51,15 @@ lineup_state = load_lineup_state_cached(selected_team)
 # ======================================================
 # Compute WeeklyPts + CumulativePts for THIS TEAM ONLY
 # ======================================================
-players_pts = players_team.copy()
-players_pts = players_pts.drop(columns=["WeeklyPts", "CumulativePts"], errors="ignore")
+players_pts = players_team[["Name", "Pos.", "team"]].copy()
 
-# Ensure columns always exist
+latest_week = None
 players_pts["WeeklyPts"] = 0.0
 players_pts["CumulativePts"] = 0.0
-latest_week = None
 
 if points is not None and not points.empty and "Week" in points.columns:
     latest_week = int(points["Week"].max())
 
-    # Vectorized filter: only points for this team's roster keys
     roster_keys = players_pts[["Name", "team"]].drop_duplicates()
     pts_small = points.merge(roster_keys, on=["Name", "team"], how="inner")
 
@@ -80,12 +77,10 @@ if points is not None and not points.empty and "Week" in points.columns:
             .rename(columns={"FantasyPoints": "CumulativePts"})
         )
 
-        # Remove defaults to avoid WeeklyPts_x/y collisions, then merge totals in
         players_pts = players_pts.drop(columns=["WeeklyPts", "CumulativePts"], errors="ignore")
         players_pts = players_pts.merge(weekly_total, on=["Name", "team"], how="left")
         players_pts = players_pts.merge(cumulative, on=["Name", "team"], how="left")
 
-        # Ensure cols exist even if merges produce none
         if "WeeklyPts" not in players_pts.columns:
             players_pts["WeeklyPts"] = 0.0
         if "CumulativePts" not in players_pts.columns:
@@ -105,7 +100,6 @@ if lineup_state is None or lineup_state.empty:
     lineup_rows = []
     pos_counts = {pos: 0 for pos in roster_template}
 
-    # deterministic ordering
     team_players = team_players.sort_values(by=["Pos.", "Name"], ascending=[True, True])
 
     for _, row in team_players.iterrows():
@@ -118,8 +112,6 @@ if lineup_state is None or lineup_state.empty:
             "team_name": selected_team,
             "player_name": row["Name"],
             "player_pos": "starter" if is_starter else "bench",
-            "Pos.": pos,
-            "team": row["team"],
         })
 
     if lineup_rows:
@@ -129,8 +121,7 @@ if lineup_state is None or lineup_state.empty:
     lineup_state = load_lineup_state_cached(selected_team)
 
 # ======================================================
-# Merge lineup_state + ALL player columns
-# IMPORTANT: avoid column collisions by keeping only needed lineup_state cols
+# Merge lineup_state + the slim display columns
 # ======================================================
 lineup_state_small = lineup_state[["team_name", "player_name", "player_pos"]].copy()
 
@@ -141,8 +132,7 @@ team_lineup = lineup_state_small.merge(
     how="inner"
 )
 
-# Ensure we have the position column from players
-pos_col = "Pos."  # from players table
+pos_col = "Pos."
 
 starters = team_lineup[team_lineup["player_pos"] == "starter"].copy()
 bench = team_lineup[team_lineup["player_pos"] == "bench"].copy()
@@ -153,11 +143,7 @@ starters["__pos_order"] = starters[pos_col].map(pos_order).fillna(999).astype(in
 starters = starters.sort_values(by=["__pos_order", pos_col, "Name"]).drop(columns="__pos_order")
 bench = bench.sort_values(by=[pos_col, "Name"])
 
-# Display columns: every players column + WeeklyPts/CumulativePts (already in players_pts)
-player_cols = list(players_pts.columns)
-front = [c for c in ["Name", "Pos.", "team", "WeeklyPts", "CumulativePts", "held_by"] if c in player_cols]
-rest = [c for c in player_cols if c not in front]
-display_cols = front + rest
+display_cols = ["Name", "Pos.", "team", "WeeklyPts", "CumulativePts"]
 
 # ======================================================
 # Display stacked tables
