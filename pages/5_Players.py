@@ -2,103 +2,126 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import db_utils
-from streamlit_autorefresh import st_autorefresh
 
 st.title("🏒 Add / Drop Players")
 
-# --- Auto-refresh ---
-st_autorefresh(interval=100000, key="players_autorefresh")
+# ======================================================
+# CACHED LOADERS
+# ======================================================
+@st.cache_data(ttl=300, show_spinner=False)
+def load_teams_cached():
+    return db_utils.load_teams()
 
-# --- Load data ---
-teams = db_utils.load_teams()
-players = db_utils.load_players()
+@st.cache_data(ttl=180, show_spinner=False)
+def load_players_cached():
+    return db_utils.load_players()
+
+@st.cache_data(ttl=180, show_spinner=False)
+def load_last_week_stats_cached():
+    return db_utils.load_last_week_stats()
+
+@st.cache_data(ttl=30, show_spinner=False)
+def load_lineup_state_team_cached(team_name: str):
+    return db_utils.load_lineup_state(team_name)
+
+with st.sidebar:
+    if st.button("🔄 Refresh cached data"):
+        st.cache_data.clear()
+        st.rerun()
+
+# ======================================================
+# LOAD DATA
+# ======================================================
+teams = load_teams_cached()
+players = load_players_cached()
+stats = load_last_week_stats_cached()
 
 if teams.empty:
     st.warning("No teams registered yet.")
     st.stop()
 
-# --- Select team ---
+# Merge last_week_stats onto players so we can display all stat columns
+# last_week_stats is expected to have Name, team + stat cols
+if stats is not None and not stats.empty:
+    players = players.merge(stats, on=["Name", "team"], how="left")
+
+# ======================================================
+# SELECT TEAM
+# ======================================================
 my_team_name = st.selectbox("Select your team:", teams["team_name"])
 
-# --- Load lineup state ---
-lineup_state = db_utils.load_lineup_state(my_team_name)
+# Load lineup_state so we can show starter/bench status on roster
+lineup_state = load_lineup_state_team_cached(my_team_name)
 
-# --- Merge lineup state into players ---
-players = players.merge(
-    lineup_state[["player_name", "player_pos"]],
-    left_on="Name",
-    right_on="player_name",
-    how="left"
-)
+if lineup_state is not None and not lineup_state.empty:
+    ls_small = lineup_state[["player_name", "player_pos"]].copy()
+    players = players.merge(ls_small, left_on="Name", right_on="player_name", how="left")
+else:
+    players["player_pos"] = np.nan
 
 players["player_pos"] = players["player_pos"].fillna("bench")
 
-# --- Roster limits ---
-roster_template = {"F": 6, "D": 4, "G": 2}
-num_bench = 5
-
-# --- Build roster display ---
-def build_roster_display(team_name):
-    team_players = players[players["held_by"] == team_name].copy()
-    roster_rows = []
-
-    # Starters
-    for pos, slots in roster_template.items():
-        starters = team_players[
-            (team_players["Pos."] == pos) &
-            (team_players["player_pos"] == "starter")
-        ].head(slots)
-
-        for _, row in starters.iterrows():
-            roster_rows.append(row)
-
-    # Bench
-    bench_players = team_players[team_players["player_pos"] == "bench"]
-    for _, row in bench_players.iterrows():
-        bench_row = row.copy()
-        bench_row["Pos."] = f"Bench - {row['Pos.']}"
-        roster_rows.append(bench_row)
-
-    return pd.DataFrame(roster_rows)
-
-# --- Display roster ---
+# ======================================================
+# DISPLAY: TEAM ROSTER (WITH ALL STATS COLS)
+# ======================================================
 st.subheader(f"{my_team_name}'s Current Roster")
-roster_df = build_roster_display(my_team_name)
 
-if roster_df.empty:
+team_roster = players[players["held_by"] == my_team_name].copy()
+
+# Put player_pos near the front for readability
+front_cols = [c for c in ["Name", "Pos.", "team", "player_pos"] if c in team_roster.columns]
+rest_cols = [c for c in team_roster.columns if c not in front_cols and c != "player_name"]
+roster_display_cols = front_cols + rest_cols
+
+if team_roster.empty:
     st.info("No players on roster yet.")
 else:
     st.dataframe(
-        roster_df.set_index(["Name", "team", "Pos."])
-        .drop(columns=["held_by", "player_name", "player_pos"], errors="ignore"),
-        height=500,
-        use_container_width=True
+        team_roster[roster_display_cols]
+        .set_index(["Name", "team", "Pos."]),
+        use_container_width=True,
+        height=480
     )
 
-# --- Free agents ---
+# ======================================================
+# DISPLAY: FREE AGENTS (WITH ALL STATS COLS)
+# ======================================================
 st.subheader("Available Free Agents")
-free_agents = players[players["held_by"].isna()]
+
+free_agents = players[players["held_by"].isna()].copy()
+
+fa_front = [c for c in ["Name", "Pos.", "team"] if c in free_agents.columns]
+fa_rest = [c for c in free_agents.columns if c not in fa_front and c != "player_name"]
+fa_display_cols = fa_front + fa_rest
 
 st.dataframe(
-    free_agents.set_index(["Name", "team", "Pos."])
-    .drop(columns=["held_by", "player_name", "player_pos"], errors="ignore"),
-    height=500,
-    use_container_width=True
+    free_agents[fa_display_cols].set_index(["Name", "team", "Pos."]),
+    use_container_width=True,
+    height=480
 )
 
-# --- Session state ---
+# ======================================================
+# ADD/DROP UI
+# ======================================================
+st.divider()
+st.subheader("Add & Drop")
+
 if "add_player" not in st.session_state:
     st.session_state.add_player = ""
 if "drop_player" not in st.session_state:
     st.session_state.drop_player = ""
 
-# --- Display helpers ---
-def format_options(df):
-    df = df.copy()
-    df["display"] = df["Name"] + " - " + df["Pos."] + " - " + df["team"]
-    return df
+def format_options(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    # keep dropdown compact even with many stat columns
+    out["display"] = (
+        out["Name"].astype(str) + " - "
+        + out["Pos."].astype(str) + " - "
+        + out["team"].astype(str)
+    )
+    return out
 
-# --- Add dropdown ---
+# Add selection
 add_df = format_options(free_agents)
 add_options = [""] + add_df["display"].tolist()
 st.session_state.add_player = st.selectbox(
@@ -108,9 +131,8 @@ st.session_state.add_player = st.selectbox(
     if st.session_state.add_player in add_options else 0
 )
 
-# --- Drop dropdown ---
-team_players = players[players["held_by"] == my_team_name]
-drop_df = format_options(team_players)
+# Drop selection
+drop_df = format_options(team_roster)
 drop_options = [""] + drop_df["display"].tolist()
 st.session_state.drop_player = st.selectbox(
     "Select a player to drop:",
@@ -119,52 +141,34 @@ st.session_state.drop_player = st.selectbox(
     if st.session_state.drop_player in drop_options else 0
 )
 
-# --- Add / Drop ---
-if st.button("Add & Drop Player"):
-
+# ======================================================
+# EXECUTE ADD/DROP (updates players.held_by + lineup_state)
+# ======================================================
+if st.button("✅ Add & Drop Player"):
     if not st.session_state.add_player or not st.session_state.drop_player:
         st.warning("Please select both a player to add and a player to drop.")
         st.stop()
 
-    add_name = st.session_state.add_player.split(" - ")[0]
-    drop_name = st.session_state.drop_player.split(" - ")[0]
+    add_name = st.session_state.add_player.split(" - ")[0].strip()
+    drop_name = st.session_state.drop_player.split(" - ")[0].strip()
 
     add_row = players.loc[players["Name"] == add_name].iloc[0]
-    drop_row = players.loc[players["Name"] == drop_name].iloc[0]
 
-    pos_add = add_row["Pos."]
-    pos_drop = drop_row["Pos."]
-
-    # --- Position limits (bench-aware) ---
-    current_count = len(
-        players[
-            (players["held_by"] == my_team_name) &
-            (players["Pos."] == pos_add)
-        ]
-    )
-
-    if pos_add == pos_drop:
-        current_count -= 1
-
-    max_allowed = roster_template.get(pos_add, 0) + num_bench
-
-    if current_count >= max_allowed:
-        st.warning(f"No available {pos_add} slots (including bench).")
-        st.stop()
-
-    # --- Execute add/drop ---
     db_utils.add_drop_player(
         team_name=my_team_name,
         add_player=add_name,
         drop_player=drop_name,
-        add_player_pos=pos_add,
+        add_player_pos=add_row["Pos."],
         add_player_team=add_row["team"],
         starter=False
     )
 
     st.success(f"✅ Added {add_name} and dropped {drop_name}")
 
-    # --- Reset selections ---
+    # Reset selections
     st.session_state.add_player = ""
     st.session_state.drop_player = ""
 
+    # Clear cache so UI reflects changes immediately
+    st.cache_data.clear()
+    st.rerun()
