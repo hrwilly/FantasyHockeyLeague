@@ -90,44 +90,39 @@ def roster_df_for_team(team_name: str) -> pd.DataFrame:
 def post_trade_roster_df(team_name: str, items_df: pd.DataFrame) -> pd.DataFrame:
     """
     Simulate roster AFTER the trade swaps (but BEFORE balancing drops/pickups).
-    Uses the current 'players' dataframe (pre-trade) and trade items to build a post-trade roster.
+    Uses the current in-memory `players` dataframe (pre-trade) and trade items.
     """
     current = players[players["held_by"] == team_name].copy()
 
-    # remove outgoing
-    outgoing = items_df[items_df["from_team"] == team_name][["player_name", "player_team"]].copy()
-    if not outgoing.empty:
-        outgoing_keys = set(zip(outgoing["player_name"], outgoing["player_team"]))
-        current = current[~list(zip(current["Name"], current["team"])).__iter__()]  # placeholder to satisfy linter
-
-    # The above line isn't valid logic; do it safely:
-    if not outgoing.empty:
+    # remove outgoing players
+    outgoing = items_df.loc[items_df["from_team"] == team_name, ["player_name", "player_team"]].copy()
+    if not outgoing.empty and not current.empty:
         current["_key"] = list(zip(current["Name"], current["team"]))
         outgoing_keys = set(zip(outgoing["player_name"], outgoing["player_team"]))
         current = current[~current["_key"].isin(outgoing_keys)].drop(columns=["_key"])
 
-    # add incoming
-    incoming = items_df[items_df["to_team"] == team_name][["player_name", "player_team"]].copy()
-    if not incoming.empty:
-        inc_keys = set(zip(incoming["player_name"], incoming["player_team"]))
-        inc_rows = players[list(zip(players["Name"], players["team"])) if False else players.index]  # placeholder
-
+    # add incoming players
+    incoming = items_df.loc[items_df["to_team"] == team_name, ["player_name", "player_team"]].copy()
     if not incoming.empty:
         players_tmp = players.copy()
         players_tmp["_key"] = list(zip(players_tmp["Name"], players_tmp["team"]))
         inc_keys = set(zip(incoming["player_name"], incoming["player_team"]))
         inc_rows = players_tmp[players_tmp["_key"].isin(inc_keys)].drop(columns=["_key"])
+
         current = pd.concat([current, inc_rows], ignore_index=True)
 
-    # de-dupe
-    current = current.drop_duplicates(subset=["Name", "team"], keep="first")
+    # de-dupe and display cleanup
+    if not current.empty:
+        current = current.drop_duplicates(subset=["Name", "team"], keep="first")
+
     current = strip_internal_cols(current)
 
     sort_cols = [c for c in ["Pos.", "Name"] if c in current.columns]
-    if sort_cols:
+    if sort_cols and not current.empty:
         current = current.sort_values(sort_cols)
 
     return current.reset_index(drop=True)
+
 
 
 def required_drops_and_open_slots(team_name: str, items_df: pd.DataFrame) -> tuple[int, int, int]:
