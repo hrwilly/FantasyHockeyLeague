@@ -463,8 +463,9 @@ def set_trade_status(trade_id: str, status: str, actor_team: str):
 def execute_trade(trade_id: str):
     """
     Executes the player ownership swaps if (and only if) all players are still on the expected teams.
-    ALSO keeps lineup_state consistent (same idea as add_drop_player).
+    Also keeps lineup_state consistent so players don't "disappear" on the Team page.
     """
+
     trade = supabase.table("trades").select("*").eq("id", trade_id).execute().data[0]
     if trade["status"] != "PROPOSED":
         raise ValueError(f"Trade is not PROPOSED (status={trade['status']}).")
@@ -473,7 +474,9 @@ def execute_trade(trade_id: str):
     if items.empty:
         raise ValueError("Trade has no players.")
 
-    # Verify ownership
+    # -----------------------------
+    # 1) Verify ownership
+    # -----------------------------
     problems = []
     for _, row in items.iterrows():
         name = row["player_name"]
@@ -500,21 +503,24 @@ def execute_trade(trade_id: str):
     if problems:
         raise ValueError("Cannot execute trade:\n- " + "\n- ".join(problems))
 
-    # Apply updates (swap ownership)
+    # -----------------------------
+    # 2) Apply ownership swaps
+    # -----------------------------
     for _, row in items.iterrows():
         supabase.table("players").update(
             {"held_by": row["to_team"]}
         ).eq("Name", row["player_name"]).eq("team", row["player_team"]).execute()
 
-    # ✅ NEW: keep lineup_state consistent (mirrors add_drop_player behavior)
+    # -----------------------------
+    # 3) Move lineup_state rows too
+    # -----------------------------
     for _, row in items.iterrows():
         name = row["player_name"]
-        pteam = row["player_team"]
         from_team = row["from_team"]
         to_team = row["to_team"]
 
-        # Preserve starter/bench from the sending team if it exists
-        ls = (
+        # Preserve starter/bench if it exists; else default to bench
+        existing = (
             supabase.table("lineup_state")
             .select("player_pos")
             .eq("team_name", from_team)
@@ -522,33 +528,21 @@ def execute_trade(trade_id: str):
             .execute()
             .data
         )
-        player_pos = ls[0]["player_pos"] if ls else "bench"
+        player_pos = existing[0]["player_pos"] if existing else "bench"
 
-        # Optional: keep Pos./team columns populated (like add_drop_player does)
-        pinfo = (
-            supabase.table("players")
-            .select("Pos.")
-            .eq("Name", name)
-            .eq("team", pteam)
-            .execute()
-            .data
-        )
-        pos_val = pinfo[0].get("Pos.") if pinfo else None
-
-        # Remove from old team's lineup_state
+        # Remove from old team
         supabase.table("lineup_state").delete() \
             .eq("team_name", from_team) \
             .eq("player_name", name) \
             .execute()
 
-        # Add to new team's lineup_state
+        # Add to new team (ONLY columns Team page needs)
         supabase.table("lineup_state").upsert({
             "team_name": to_team,
             "player_name": name,
             "player_pos": player_pos,
-            "Pos.": pos_val,
-            "team": pteam
         }).execute()
+
 
 
 
