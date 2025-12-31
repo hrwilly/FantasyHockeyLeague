@@ -5,135 +5,162 @@ import db_utils
 
 st.title("🏒 My Team")
 
-# ----------------------------
-# Load teams
-# ----------------------------
-teams = db_utils.load_teams()
+# ======================================================
+# CACHED LOADERS (big speed-up on selectbox reruns)
+# ======================================================
+@st.cache_data(ttl=300, show_spinner=False)
+def load_teams_cached():
+    return db_utils.load_teams()
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_players_cached():
+    return db_utils.load_players()
+
+@st.cache_data(ttl=120, show_spinner=False)
+def load_points_cached():
+    return db_utils.load_points()
+
+# Keep lineup_state cache short so swaps reflect quickly
+@st.cache_data(ttl=2, show_spinner=False)
+def load_lineup_state_cached(team_name: str):
+    return db_utils.load_lineup_state(team_name)
+
+# Manual refresh button (optional but handy)
+with st.sidebar:
+    if st.button("🔄 Refresh cached data"):
+        st.cache_data.clear()
+        st.rerun()
+
+# ======================================================
+# LOAD TEAMS / SELECT TEAM
+# ======================================================
+teams = load_teams_cached()
 if teams.empty:
     st.warning("No teams registered yet.")
     st.stop()
 
-# ----------------------------
-# Select team
-# ----------------------------
 selected_team = st.selectbox("Select your team:", teams["team_name"])
 
-# ----------------------------
-# Load base tables
-# ----------------------------
-players = db_utils.load_players()
-points = db_utils.load_points()
-lineup_state = db_utils.load_lineup_state(selected_team)
+# ======================================================
+# LOAD PLAYERS / POINTS / LINEUP_STATE
+# ======================================================
+players = load_players_cached()
+points = load_points_cached()
+lineup_state = load_lineup_state_cached(selected_team)
 
-# ----------------------------
-# Compute WeeklyPts + CumulativePts (from points table)
-# ----------------------------
+# ======================================================
+# Compute WeeklyPts + CumulativePts (fast path)
+# ======================================================
 players_pts = players.copy()
+players_pts["WeeklyPts"] = 0.0
+players_pts["CumulativePts"] = 0.0
+latest_week = None
 
 if points is not None and not points.empty and "Week" in points.columns:
-    # latest week available in points
     latest_week = int(points["Week"].max())
 
-    # weekly totals for latest week
-    weekly = points.loc[points["Week"] == latest_week, ["Name", "team", "FantasyPoints", "Week"]].copy()
+    # Weekly totals for latest week
+    weekly = points.loc[points["Week"] == latest_week, ["Name", "team", "FantasyPoints"]]
     weekly_total = (
-        weekly
-        .pivot_table(index=["Name", "team"], values="FantasyPoints", aggfunc="sum")
-        .reset_index()
+        weekly.groupby(["Name", "team"], as_index=False)["FantasyPoints"]
+        .sum()
         .rename(columns={"FantasyPoints": "WeeklyPts"})
     )
 
-    # cumulative totals across all weeks
+    # Cumulative totals across all weeks
     cumulative = (
-        points
-        .pivot_table(index=["Name", "team"], values="FantasyPoints", aggfunc="sum")
-        .reset_index()
+        points.groupby(["Name", "team"], as_index=False)["FantasyPoints"]
+        .sum()
         .rename(columns={"FantasyPoints": "CumulativePts"})
     )
 
     players_pts = players_pts.merge(weekly_total, on=["Name", "team"], how="left")
     players_pts = players_pts.merge(cumulative, on=["Name", "team"], how="left")
-else:
-    latest_week = None
-    players_pts["WeeklyPts"] = 0.0
-    players_pts["CumulativePts"] = 0.0
 
-players_pts["WeeklyPts"] = players_pts["WeeklyPts"].fillna(0.0).astype(float)
-players_pts["CumulativePts"] = players_pts["CumulativePts"].fillna(0.0).astype(float)
+players_pts["WeeklyPts"] = players_pts["WeeklyPts"].fillna(0.0).astype(float).round(1)
+players_pts["CumulativePts"] = players_pts["CumulativePts"].fillna(0.0).astype(float).round(1)
 
-# ----------------------------
+# ======================================================
 # Initialize lineup_state if empty (first time only)
-# ----------------------------
+# ======================================================
 roster_template = {"F": 6, "D": 4, "G": 2}
 
-# ----------------------------
-# Merge lineup_state with full player columns
-#   lineup_state has: team_name, player_name, player_pos, Pos., team
-#   players_pts has: ALL players columns + WeeklyPts/CumulativePts
-# ----------------------------
+if lineup_state is None or lineup_state.empty:
+    team_players = players_pts[players_pts["held_by"] == selected_team].copy()
+
+    lineup_rows = []
+    pos_counts = {pos: 0 for pos in roster_template}
+
+    team_players = team_players.sort_values(by=["Pos.", "Name"], ascending=[True, True])
+
+    for _, row in team_players.iterrows():
+        pos = row["Pos."]
+        is_starter = (pos in roster_template) and (pos_counts[pos] < roster_template[pos])
+        if is_starter:
+            pos_counts[pos] += 1
+
+        lineup_rows.append({
+            "team_name": selected_team,
+            "player_name": row["Name"],
+            "player_pos": "starter" if is_starter else "bench",
+            "Pos.": pos,
+            "team": row["team"],
+        })
+
+    if lineup_rows:
+        db_utils.save_lineup_state(lineup_rows)
+
+    # Refresh cached lineup_state
+    load_lineup_state_cached.clear()
+    lineup_state = load_lineup_state_cached(selected_team)
+
+# ======================================================
+# Merge lineup_state + ALL player columns
+# ======================================================
 team_lineup = lineup_state.merge(
     players_pts,
     left_on="player_name",
     right_on="Name",
-    how="left",
-    suffixes=("", "_players")
+    how="left"
 )
 
-# Keep only current team’s owned players in case of stale rows
-# (Optional safety: lineup_state should already only contain owned players)
+# Safety: only show currently owned players
 team_lineup = team_lineup[team_lineup["held_by"] == selected_team].copy()
 
-# ----------------------------
-# Build ordered starter/bench views
-# ----------------------------
 starters = team_lineup[team_lineup["player_pos"] == "starter"].copy()
 bench = team_lineup[team_lineup["player_pos"] == "bench"].copy()
 
-# order starters by roster template positions
+# Order starters by position F/D/G then name
 pos_order = {p: i for i, p in enumerate(roster_template.keys())}
 starters["__pos_order"] = starters["Pos."].map(pos_order).fillna(999).astype(int)
-starters = starters.sort_values(by=["__pos_order", "Pos.", "Name"], ascending=[True, True, True]).drop(columns="__pos_order")
+starters = starters.sort_values(by=["__pos_order", "Pos.", "Name"]).drop(columns="__pos_order")
+bench = bench.sort_values(by=["Pos.", "Name"])
 
-# bench order: by position then name
-bench = bench.sort_values(by=["Pos.", "Name"], ascending=[True, True])
+# Columns: include every players column + WeeklyPts/CumulativePts (already in players_pts)
+player_cols = list(players_pts.columns)
 
-# ----------------------------
-# Display stacked: Starters then Bench
-# Include EVERY column from players + WeeklyPts + CumulativePts
-# (We’ll hide helper columns and duplicate join keys)
-# ----------------------------
+# Put common columns first for readability
+front = [c for c in ["Name", "Pos.", "team", "WeeklyPts", "CumulativePts", "held_by"] if c in player_cols]
+rest = [c for c in player_cols if c not in front]
+display_cols = front + rest
+
+# ======================================================
+# Display stacked tables (NO Styler = much faster)
+# ======================================================
 st.subheader(f"{selected_team}'s Lineup")
-
 if latest_week is not None:
     st.caption(f"WeeklyPts = Week {latest_week} totals | CumulativePts = season-to-date")
 else:
     st.caption("WeeklyPts/CumulativePts are 0 because there are no saved points yet.")
 
-# Choose columns: "Name" first, then rest of players columns, plus WeeklyPts/CumulativePts
-# (players_pts already has WeeklyPts/CumulativePts)
-player_cols = list(players_pts.columns)
-
-# Move Name/team/Pos. toward the front for readability
-front = [c for c in ["Name", "Pos.", "team", "WeeklyPts", "CumulativePts"] if c in player_cols]
-display_cols = front
-
 st.markdown("### Starters")
 if starters.empty:
     st.info("No starters set.")
 else:
-    starters_view = starters[display_cols].copy()
-
-    # formatting
-    fmt_cols = {}
-    if "WeeklyPts" in starters_view.columns:
-        fmt_cols["WeeklyPts"] = "{:.1f}"
-    if "CumulativePts" in starters_view.columns:
-        fmt_cols["CumulativePts"] = "{:.1f}"
-
     st.dataframe(
-        starters_view.style.format(fmt_cols, na_rep=""),
+        starters[display_cols],
         use_container_width=True,
-        height=420
+        height=480
     )
 
 st.divider()
@@ -142,24 +169,15 @@ st.markdown("### Bench")
 if bench.empty:
     st.info("No bench players.")
 else:
-    bench_view = bench[display_cols].copy()
-
-    fmt_cols = {}
-    if "WeeklyPts" in bench_view.columns:
-        fmt_cols["WeeklyPts"] = "{:.1f}"
-    if "CumulativePts" in bench_view.columns:
-        fmt_cols["CumulativePts"] = "{:.1f}"
-
     st.dataframe(
-        bench_view.style.format(fmt_cols, na_rep=""),
+        bench[display_cols],
         use_container_width=True,
-        height=200
+        height=220
     )
 
-# ----------------------------
-# Swap UI (still works, persists to DB)
-# Only allow swaps between same base position
-# ----------------------------
+# ======================================================
+# Swap UI (fast; only lineup_state changes on click)
+# ======================================================
 st.divider()
 st.subheader("🔄 Swap Players (Starter ↔ Bench)")
 
@@ -181,7 +199,7 @@ swap_out = st.selectbox(
 )
 st.session_state.swap_out = swap_out
 
-# Bench filtered by same Pos.
+# Bench candidates filtered by same Pos.
 if swap_out:
     out_pos = starters.loc[starters["player_name"] == swap_out, "Pos."].values[0]
     bench_candidates = bench.loc[bench["Pos."] == out_pos, "player_name"].tolist()
@@ -203,6 +221,9 @@ if st.button("Swap Players") and swap_out and swap_in:
         player_out=swap_out,
         player_in=swap_in
     )
+
+    # Clear lineup_state cache so the UI reflects the swap immediately
+    load_lineup_state_cached.clear()
 
     st.success("✅ Players swapped successfully!")
     st.session_state.swap_out = ""
