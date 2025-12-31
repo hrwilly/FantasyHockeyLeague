@@ -27,7 +27,6 @@ def load_last_week_stats_cached():
 
 @st.cache_data(ttl=2, show_spinner=False)
 def load_lineup_state_cached(team_name: str):
-    # Requires db_utils.load_lineup_state(team_name)
     return db_utils.load_lineup_state(team_name)
 
 with st.sidebar:
@@ -47,9 +46,8 @@ selected_team = st.selectbox("Select your team:", teams["team_name"])
 
 # ======================================================
 # TOGGLE: SHOW STATS COLUMNS
-# (Put this near the top so it doesn't move around)
 # ======================================================
-show_stats = st.toggle("Show player stats columns", value=True)
+show_stats = st.toggle("Show last week stats columns", value=True)
 
 # ======================================================
 # LOAD TEAM PLAYERS / POINTS / STATS / LINEUP_STATE
@@ -135,7 +133,7 @@ if lineup_state is None or lineup_state.empty:
     lineup_state = load_lineup_state_cached(selected_team)
 
 # ======================================================
-# Merge lineup_state + player data (avoid Pos./team collisions)
+# Merge lineup_state + player data (avoid collisions)
 # ======================================================
 lineup_state_small = lineup_state[["team_name", "player_name", "player_pos"]].copy()
 
@@ -165,7 +163,7 @@ stat_cols = [c for c in stats.columns if c not in ["Name", "team"]] if stats is 
 display_cols = base_cols + stat_cols if show_stats else base_cols
 
 # ======================================================
-# Display stacked tables
+# Display stacked tables (Name, Pos., team as index)
 # ======================================================
 st.subheader(f"{selected_team}'s Lineup")
 if latest_week is not None:
@@ -177,7 +175,8 @@ st.markdown("### Starters")
 if starters.empty:
     st.info("No starters set.")
 else:
-    st.dataframe(starters[display_cols], use_container_width=True, height=480)
+    starters_view = starters[display_cols].set_index(["Name", "Pos.", "team"])
+    st.dataframe(starters_view, use_container_width=True, height=480)
 
 st.divider()
 
@@ -185,7 +184,8 @@ st.markdown("### Bench")
 if bench.empty:
     st.info("No bench players.")
 else:
-    st.dataframe(bench[display_cols], use_container_width=True, height=220)
+    bench_view = bench[display_cols].set_index(["Name", "Pos.", "team"])
+    st.dataframe(bench_view, use_container_width=True, height=220)
 
 # ======================================================
 # Swap UI
