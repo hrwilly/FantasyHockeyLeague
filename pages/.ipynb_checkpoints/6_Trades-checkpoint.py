@@ -263,4 +263,16 @@ def trade_list(df: pd.DataFrame, title: str):
                         st.rerun()
                 with b2:
                     if st.button("Nevermind", key=f"ctr_cancel_{trade_id}"):
-                        st.session_state.pop("cou_
+                        st.session_state.pop("countering_trade_id", None)
+                        st.rerun()
+
+with tab_inbox:
+    inbox = trades[trades["recipient_team"] == viewer_team].copy()
+    trade_list(inbox, "Trades sent to you")
+
+with tab_outbox:
+    outbox = trades[trades["proposer_team"] == viewer_team].copy()
+    trade_list(outbox, "Trades you sent")
+
+with tab_all:
+    trade_list(trades, "All trades involving this team")
