@@ -857,18 +857,7 @@ for _, t in trades_df.iterrows():
             free_agents_all = players_display[players_display["held_by"].isna()].copy()
             free_agents_all = free_agents_all.drop_duplicates(subset=["Name", "team"], keep="first").reset_index(drop=True)
 
-            fa_query = st.text_input(
-                "Search free agents (optional)",
-                key=f"fa_q_{trade_id}_{viewer_team}",
-                placeholder="Type a name or NHL team abbreviation…",
-            )
             free_agents = free_agents_all
-            if fa_query:
-                q = fa_query.lower()
-                free_agents = free_agents_all[
-                    free_agents_all["Name"].astype(str).str.lower().str.contains(q)
-                    | free_agents_all["team"].astype(str).str.lower().str.contains(q)
-                ].copy()
 
             # Load stored moves (read-only display for the other side)
             tr_full = get_trade(trade_id)
