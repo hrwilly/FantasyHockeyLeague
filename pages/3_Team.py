@@ -49,7 +49,7 @@ selected_team = st.selectbox("Select your team:", teams["team_name"])
 # TOGGLE: SHOW STATS COLUMNS
 # (Put this near the top so it doesn't move around)
 # ======================================================
-show_stats = st.toggle("Show last week stats columns", value=True)
+show_stats = st.toggle("Show player stats columns", value=True)
 
 # ======================================================
 # LOAD TEAM PLAYERS / POINTS / STATS / LINEUP_STATE
