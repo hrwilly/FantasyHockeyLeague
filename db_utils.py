@@ -463,16 +463,14 @@ def set_trade_status(trade_id: str, status: str, actor_team: str):
 def execute_trade(trade_id: str):
     """
     Executes the player ownership swaps if (and only if) all players are still on the expected teams.
-    Raises ValueError if any player ownership doesn't match what the trade expects.
+    ALSO keeps lineup_state consistent (same idea as add_drop_player).
     """
-    # Fetch trade and items
     trade = supabase.table("trades").select("*").eq("id", trade_id).execute().data[0]
     if trade["status"] != "PROPOSED":
         raise ValueError(f"Trade is not PROPOSED (status={trade['status']}).")
 
     items = load_trade_players(trade_id)
     if items.empty:
-        # Allow empty trades? Probably not, but handle safely:
         raise ValueError("Trade has no players.")
 
     # Verify ownership
@@ -507,6 +505,51 @@ def execute_trade(trade_id: str):
         supabase.table("players").update(
             {"held_by": row["to_team"]}
         ).eq("Name", row["player_name"]).eq("team", row["player_team"]).execute()
+
+    # ✅ NEW: keep lineup_state consistent (mirrors add_drop_player behavior)
+    for _, row in items.iterrows():
+        name = row["player_name"]
+        pteam = row["player_team"]
+        from_team = row["from_team"]
+        to_team = row["to_team"]
+
+        # Preserve starter/bench from the sending team if it exists
+        ls = (
+            supabase.table("lineup_state")
+            .select("player_pos")
+            .eq("team_name", from_team)
+            .eq("player_name", name)
+            .execute()
+            .data
+        )
+        player_pos = ls[0]["player_pos"] if ls else "bench"
+
+        # Optional: keep Pos./team columns populated (like add_drop_player does)
+        pinfo = (
+            supabase.table("players")
+            .select("Pos.")
+            .eq("Name", name)
+            .eq("team", pteam)
+            .execute()
+            .data
+        )
+        pos_val = pinfo[0].get("Pos.") if pinfo else None
+
+        # Remove from old team's lineup_state
+        supabase.table("lineup_state").delete() \
+            .eq("team_name", from_team) \
+            .eq("player_name", name) \
+            .execute()
+
+        # Add to new team's lineup_state
+        supabase.table("lineup_state").upsert({
+            "team_name": to_team,
+            "player_name": name,
+            "player_pos": player_pos,
+            "Pos.": pos_val,
+            "team": pteam
+        }).execute()
+
 
 
 def counter_trade(
