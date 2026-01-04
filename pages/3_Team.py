@@ -3,6 +3,90 @@ import pandas as pd
 import numpy as np
 import db_utils
 
+from datetime import date, datetime
+
+# ======================================================
+# COLLEGE SCHEDULE HELPERS (pandas + datetime only)
+# ======================================================
+
+def season_suffix_and_end_year(today: date | None = None):
+    """Return ('26', 2026) for Jan 2026, ('26', 2026) for Dec 2025, etc."""
+    today = today or date.today()
+    # College season spans fall->spring; scheduleYY uses the "ending year"
+    end_year = today.year if today.month <= 6 else (today.year + 1)
+    return f"{end_year % 100:02d}", end_year
+
+def get_raw_schedule(slug: str, season_suffix: str) -> pd.DataFrame:
+    url = f"https://collegehockeyinc.com/teams/{slug}/schedule{season_suffix}.php"
+    # You said col 0 = date weird, col 2 = W/L (NaN for future)
+    return pd.read_html(url)[0][[0, 2]].copy()
+
+def format_schedule(raw: pd.DataFrame, season_end_year: int) -> pd.DataFrame:
+    month_names = [
+        "January","February","March","April","May","June",
+        "July","August","September","October","November","December"
+    ]
+    month_to_num = {m: i + 1 for i, m in enumerate(month_names)}
+
+    df = raw.copy()
+    df.columns = ["date_raw", "result"]
+    df["date_raw"] = df["date_raw"].astype(str).str.strip()
+
+    tokens = df["date_raw"].str.split()
+    first = tokens.str[0].str.title()
+
+    starts_with_digit = df["date_raw"].str[0].str.isnumeric()
+    is_month_header = first.isin(month_names) & (~starts_with_digit)
+
+    # Pull month + optional year from header rows then forward-fill
+    df["month"] = first.where(is_month_header).map(month_to_num)
+    df["year"] = pd.to_numeric(tokens.str[1].where(is_month_header & (tokens.str.len() >= 2)), errors="coerce")
+
+    df["month"] = df["month"].ffill()
+    df["year"] = df["year"].ffill()
+
+    # Infer year if not present: Jul–Dec => end_year-1, Jan–Jun => end_year
+    missing_year = df["year"].isna()
+    df.loc[missing_year, "year"] = df.loc[missing_year, "month"].apply(
+        lambda m: (season_end_year - 1) if int(m) >= 7 else season_end_year
+    )
+
+    # Drop month headers -> keep game rows like "02 Fri."
+    df = df[~is_month_header].copy()
+
+    df["day"] = pd.to_numeric(df["date_raw"].str.split().str[0], errors="coerce")
+    df["weekday"] = (
+        df["date_raw"].str.split().str[1]
+        .str.replace(".", "", regex=False)
+        .str[:3]
+        .str.title()
+    )
+
+    df = df.dropna(subset=["month", "year", "day"]).copy()
+
+    df["year"] = df["year"].astype(int)
+    df["month"] = df["month"].astype(int)
+    df["day"] = df["day"].astype(int)
+
+    df["game_date"] = df.apply(lambda r: datetime(r["year"], r["month"], r["day"]).date(), axis=1)
+
+    # Clean result: NaN/"nan"/"" -> NA
+    df["result"] = df["result"].astype(str).str.strip()
+    df.loc[df["result"].isin(["nan", "None", ""]), "result"] = pd.NA
+    df["played"] = df["result"].notna()
+
+    return df[["game_date", "weekday", "result", "played"]].sort_values("game_date").reset_index(drop=True)
+
+def next_three_upcoming(tidy: pd.DataFrame, as_of: date | None = None) -> pd.DataFrame:
+    as_of = as_of or date.today()
+    upcoming = tidy[(~tidy["played"]) & (tidy["game_date"] >= as_of)]
+    return upcoming.sort_values("game_date").head(3).reset_index(drop=True)
+
+def slug_to_label(slug: str) -> str:
+    # purely for display
+    return slug.replace("-", " ").title()
+
+
 st.title("🏒 My Team")
 
 # ======================================================
@@ -28,6 +112,12 @@ def load_last_week_stats_cached():
 @st.cache_data(ttl=2, show_spinner=False)
 def load_lineup_state_cached(team_name: str):
     return db_utils.load_lineup_state(team_name)
+
+@st.cache_data(ttl=6*3600, show_spinner=False)
+def load_formatted_schedule_cached(slug: str, season_suffix: str, season_end_year: int) -> pd.DataFrame:
+    raw = get_raw_schedule(slug, season_suffix=season_suffix)
+    return format_schedule(raw, season_end_year=season_end_year)
+
 
 with st.sidebar:
     if st.button("🔄 Refresh cached data"):
@@ -161,6 +251,49 @@ bench = bench.sort_values(by=[pos_col, "Name"])
 base_cols = ["Name", "Pos.", "team", "WeeklyPts", "CumulativePts"]
 stat_cols = [c for c in stats.columns if c not in ["Name", "team"]] if stats is not None and not stats.empty else []
 display_cols = base_cols + stat_cols if show_stats else base_cols
+
+# ======================================================
+# Upcoming games by college team (for teams on this roster)
+# ======================================================
+st.divider()
+st.subheader("📅 Upcoming Games by College Team (Next 3)")
+
+season_suffix, season_end_year = season_suffix_and_end_year(date.today())
+
+# IMPORTANT: This assumes players_pts["team"] contains the CollegeHockeyInc slug.
+# If it's a display name instead, tell me and I’ll show a tiny mapping step.
+college_slugs = (
+    players_pts["team"]
+    .dropna()
+    .astype(str)
+    .str.strip()
+    .unique()
+    .tolist()
+)
+
+rows = []
+for slug in sorted(college_slugs):
+    tidy_sched = load_formatted_schedule_cached(slug, season_suffix, season_end_year)
+    n3 = next_three_upcoming(tidy_sched, as_of=date.today())
+
+    games = [d.strftime("%b %d (%a)") for d in n3["game_date"].tolist()]
+    games = (games + ["", "", ""])[:3]
+
+    rows.append({
+        "College-Team": slug_to_label(slug),
+        "Next game": games[0],
+        "Next game ": games[1],     # subtle spacing so Streamlit shows 3 distinct columns
+        "Next game  ": games[2],
+    })
+
+next3_by_team = pd.DataFrame(rows)
+
+if next3_by_team.empty:
+    st.info("No college teams found on this roster.")
+else:
+    st.dataframe(next3_by_team, use_container_width=True, hide_index=True)
+    st.caption(f"Schedule source: collegehockeyinc.com | Season schedule{season_suffix}.php")
+
 
 # ======================================================
 # Display stacked tables (Name, Pos., team as index)
