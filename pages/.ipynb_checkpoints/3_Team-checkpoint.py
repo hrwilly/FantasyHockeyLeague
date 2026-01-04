@@ -138,6 +138,8 @@ selected_team = st.selectbox("Select your team:", teams["team_name"])
 # TOGGLE: SHOW STATS COLUMNS
 # ======================================================
 show_stats = st.toggle("Show last week stats columns", value=True)
+show_upcoming = st.checkbox("Show upcoming college games (my roster only)", value=False)
+
 
 # ======================================================
 # LOAD TEAM PLAYERS / POINTS / STATS / LINEUP_STATE
@@ -255,44 +257,43 @@ display_cols = base_cols + stat_cols if show_stats else base_cols
 # ======================================================
 # Upcoming games by college team (for teams on this roster)
 # ======================================================
-st.divider()
-st.subheader("📅 Upcoming Games by College Team (Next 3)")
+if show_upcoming:
+    st.divider()
+    st.subheader("📅 Upcoming Games")
 
-season_suffix, season_end_year = season_suffix_and_end_year(date.today())
+    season_suffix, season_end_year = season_suffix_and_end_year(date.today())
 
-# IMPORTANT: This assumes players_pts["team"] contains the CollegeHockeyInc slug.
-# If it's a display name instead, tell me and I’ll show a tiny mapping step.
-college_slugs = (
-    players_pts["team"]
-    .dropna()
-    .astype(str)
-    .str.strip()
-    .unique()
-    .tolist()
-)
+    # assumes players_pts["team"] is the CollegeHockeyInc slug
+    college_slugs = (
+        players_pts["team"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .unique()
+        .tolist()
+    )
 
-rows = []
-for slug in sorted(college_slugs):
-    tidy_sched = load_formatted_schedule_cached(slug, season_suffix, season_end_year)
-    n3 = next_three_upcoming(tidy_sched, as_of=date.today())
+    rows = []
+    for slug in sorted(college_slugs):
+        tidy_sched = load_formatted_schedule_cached(slug, season_suffix, season_end_year)
+        n3 = next_three_upcoming(tidy_sched, as_of=date.today())
 
-    games = [d.strftime("%b %d (%a)") for d in n3["game_date"].tolist()]
-    games = (games + ["", "", ""])[:3]
+        games = [d.strftime("%b %d (%a)") for d in n3["game_date"].tolist()]
+        games = (games + ["", "", ""])[:3]
 
-    rows.append({
-        "College-Team": slug_to_label(slug),
-        "Next game": games[0],
-        "Next game ": games[1],     # subtle spacing so Streamlit shows 3 distinct columns
-        "Next game  ": games[2],
-    })
+        rows.append({
+            "College-Team": slug_to_label(slug),
+            "Next game": games[0],
+            "Next game ": games[1],
+            "Next game  ": games[2],
+        })
 
-next3_by_team = pd.DataFrame(rows)
+    next3_by_team = pd.DataFrame(rows)
 
-if next3_by_team.empty:
-    st.info("No college teams found on this roster.")
-else:
-    st.dataframe(next3_by_team, use_container_width=True, hide_index=True)
-    st.caption(f"Schedule source: collegehockeyinc.com | Season schedule{season_suffix}.php")
+    if next3_by_team.empty:
+        st.info("No college teams found on this roster.")
+    else:
+        st.dataframe(next3_by_team, use_container_width=True, hide_index=True)
 
 
 # ======================================================
