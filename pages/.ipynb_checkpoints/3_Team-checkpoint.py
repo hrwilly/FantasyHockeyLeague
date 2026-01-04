@@ -137,7 +137,7 @@ selected_team = st.selectbox("Select your team:", teams["team_name"])
 # ======================================================
 # TOGGLE: SHOW STATS COLUMNS
 # ======================================================
-show_stats = st.toggle("Show last week stats columns", value=True)
+show_stats = st.toggle("Show stats columns", value=True)
 show_upcoming = st.checkbox("Show upcoming college games (my roster only)", value=False)
 
 
