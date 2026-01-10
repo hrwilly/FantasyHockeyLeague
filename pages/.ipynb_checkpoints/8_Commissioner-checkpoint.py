@@ -5,30 +5,6 @@ import db_utils
 st.title("🏆 Commissioner Tools")
 
 # ======================================================
-# SIDEBAR: DRY RUN MODE
-# ======================================================
-with st.sidebar:
-    DRY_RUN = st.toggle("🧪 Dry run (no DB writes)", value=True)
-    st.caption("When enabled, buttons will compute + preview, but NOT write to Supabase.")
-
-def maybe_write(label: str, fn, *args, preview_df: pd.DataFrame | None = None, success_msg: str | None = None, **kwargs):
-    """
-    If DRY_RUN is on: show preview + skip DB write.
-    Else: call the DB write function.
-    """
-    if DRY_RUN:
-        st.info(f"DRY RUN: would execute **{label}** (skipped).")
-        if preview_df is not None and isinstance(preview_df, pd.DataFrame):
-            st.write("Preview (first 50 rows):")
-            st.dataframe(preview_df.head(50), use_container_width=True)
-        return None
-
-    out = fn(*args, **kwargs)
-    if success_msg:
-        st.success(success_msg)
-    return out
-
-# ======================================================
 # WEEK / DAY SELECTION
 # ======================================================
 selected_week = st.selectbox("Select Week", list(range(1, 16)))
@@ -42,29 +18,18 @@ st.divider()
 # ======================================================
 # 🔒 LOCK LINEUPS
 # ======================================================
-st.subheader("🔒 Lock Lineups for Scoring")
-
-st.warning(
-    "Locking lineups will snapshot ALL current team lineups.\n\n"
-    "This determines starters & bench for scoring and cannot be undone."
-)
+st.subheader("🔒 Lock Lineups for Current Week Matchups")
 
 if st.button("🔒 Lock Lineups for Week"):
-    # We can't preview rows without re-implementing lock_weekly_rosters logic here,
-    # but we can still safely dry-run the write call.
-    maybe_write(
-        label=f"lock_weekly_rosters(week={selected_week})",
-        fn=db_utils.lock_weekly_rosters,
-        week=selected_week,
-        success_msg=f"✅ Lineups locked for Week {selected_week}"
-    )
+    db_utils.lock_weekly_rosters(selected_week)
+    st.success(f"✅ Lineups locked for Week {selected_week}")
 
 st.divider()
 
 # ======================================================
 # WEEKLY SCORING
 # ======================================================
-st.subheader("🏁 Run Weekly Scoring")
+st.subheader("🏁 Run Last Night Player Scoring")
 
 def get_team_names():
     url = "https://collegehockeyinc.com/teams"
@@ -136,7 +101,7 @@ def compute_fantasy_points(df):
     scored["FantasyPoints"] = scored.sum(axis=1).round(1)
     return scored
 
-if st.button("🏁 Run Weekly Scoring"):
+if st.button("🏁 Run Last Night Player Scoring"):
     teams = get_team_names()
     current_cum = pd.DataFrame()
 
@@ -167,185 +132,159 @@ if st.button("🏁 Run Weekly Scoring"):
     st.dataframe(weekly_scored, use_container_width=True)
 
 # ======================================================
-# SAVE WEEKLY SCORING (DRY RUN SAFE)
+# SAVE WEEKLY SCORING
 # ======================================================
-if "weekly_scored" in st.session_state and st.button("💾 Save Weekly Scoring"):
-    points_df = (
-        st.session_state["weekly_scored"]
-        .reset_index()[["Name", "team", "FantasyPoints"]]
-    )
-    points_df = points_df[points_df["FantasyPoints"] != 0].copy()
+if 'weekly_scored' in st.session_state and st.button('💾 Save Scoring'):
+    st.markdown('Saving points...')
 
-    maybe_write(
-        label=f"save_weekly_points(week={selected_week}, day={selected_day})",
-        fn=db_utils.save_weekly_points,
-        preview_df=points_df,
-        points=points_df,
-        week=selected_week,
-        day=selected_day,
-        success_msg="✅ Weekly points saved"
-    )
+    points = st.session_state['weekly_scored']
+    points = points.reset_index()
+    points = points[['Name', 'team', 'FantasyPoints']]
+    points = points[points['FantasyPoints'] != 0]
 
-    # Preview current_cum too (it may be large)
-    current_cum_df = st.session_state["current_cum"].reset_index()
+    current_cum = st.session_state['current_cum']
 
-    maybe_write(
-        label="save_last_week_stats(current_cum)",
-        fn=db_utils.save_last_week_stats,
-        preview_df=current_cum_df,
-        df=st.session_state["current_cum"],
-        success_msg="✅ last_week_stats updated"
-    )
+    db_utils.save_weekly_points(points, st.session_state.selected_week, st.session_state.selected_day)
+    db_utils.save_last_week_stats(current_cum)
+    st.success(f"✅ Weekly scoring saved for Week {st.session_state.selected_week}, Day {st.session_state.selected_day}.")
 
 st.divider()
+st.subheader("🏁 Run Matchup Results")
 
-# ======================================================
-# RUN & SAVE MATCHUPS
-# ======================================================
-st.subheader("⚔️ Run Matchups")
-
-if st.button("🏁 Run Matchups"):
-    matchups = db_utils.load_matchups()
-    teams_df = db_utils.load_teams()
-    rosters = db_utils.load_roster()   # active_roster snapshot
+if st.button('🏁 Run Matchup Results'):
+    matchups_df = db_utils.load_matchups()
+    managers = db_utils.load_teams()
+    rosters_df = db_utils.load_roster()
     points = db_utils.load_points()
 
-    matchups = (
-        matchups
-        .merge(teams_df.rename(columns={"team_name": "home_team", "manager": "manager_1"}), on="home_team")
-        .merge(teams_df.rename(columns={"team_name": "away_team", "manager": "manager_2"}), on="away_team")
-    )
-
-    week_matchups = matchups[matchups["week"] == selected_week].copy()
-    week_rosters = rosters[rosters["week"] == selected_week].copy()
-    week_points = points[points["Week"] == selected_week].copy()
-
-    if week_points.empty:
-        week_rosters["points"] = 0.0
-    else:
-        totals = (
-            week_points.groupby(["Name", "team"], as_index=False)["FantasyPoints"]
-            .sum()
-            .rename(columns={"Name": "player_name", "FantasyPoints": "points"})
+    st.session_state['team_stats'] = managers
+    
+    matchups_df = (
+            matchups_df
+            .merge(managers.rename(columns={"team_name": "home_team", "manager": "manager_1"}), on="home_team")
+            .merge(managers.rename(columns={"team_name": "away_team", "manager": "manager_2"}), on="away_team")
         )
-        week_rosters = week_rosters.merge(totals, on=["player_name", "team"], how="left")
-        week_rosters["points"] = week_rosters["points"].fillna(0.0)
 
+    selected_week = st.session_state.selected_week
+    week_matchups = matchups_df[matchups_df["week"] == selected_week]
+    week_rosters = rosters_df[rosters_df['week'] == selected_week]
+    week_points = points[points['Week'] == selected_week]
+
+    weekly = points[points['Week'] == selected_week][['Name', 'team', 'FantasyPoints', 'Week']]
+    weekly_total = weekly.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
+    weekly_total['points'] = round(weekly_total.sum(axis=1), 1)
+    weekly_total = weekly_total.reset_index()[['Name', 'team', 'points']]
+
+    if len(week_points) != 0:
+        week_rosters = week_rosters.merge(weekly_total.rename(columns = {'Name' : 'player_name'}), on = ['player_name', 'team'], how = 'left')
+    else:
+        week_rosters['points'] = [0] * len(week_rosters)
+
+    # Initialize new columns
     week_matchups["home_team_points"] = 0.0
     week_matchups["away_team_points"] = 0.0
-
-    for i, row in week_matchups.iterrows():
-        home = row["home_team"]
-        away = row["away_team"]
-
-        home_pts = (
+    
+    # Loop through each matchup and sum starter points
+    for idx, row in week_matchups.iterrows():
+        home_team = row["home_team"]
+        away_team = row["away_team"]
+    
+        home_points = (
             week_rosters
-            .query("team_name == @home and player_pos == 'starter'")["points"]
+            .query("team_name == @home_team and player_pos == 'starter'")
+            ["points"]
+            .fillna(0)
             .sum()
         )
-        away_pts = (
+    
+        away_points = (
             week_rosters
-            .query("team_name == @away and player_pos == 'starter'")["points"]
+            .query("team_name == @away_team and player_pos == 'starter'")
+            ["points"]
+            .fillna(0)
             .sum()
         )
+    
+        week_matchups.loc[idx, "home_team_points"] = round(home_points, 1)
+        week_matchups.loc[idx, "away_team_points"] = round(away_points, 1)
 
-        week_matchups.loc[i, "home_team_points"] = round(float(home_pts), 1)
-        week_matchups.loc[i, "away_team_points"] = round(float(away_pts), 1)
+    db_utils.save_weekly_matchups(week_matchups, selected_week)
+    st.success(f"✅ Weekly matchup scores saved for Week {st.session_state.selected_week}")
 
-    st.session_state["week_matchups_preview"] = week_matchups
+    st.dataframe(week_matchups[['week', 'home_team', 'away_team', 'home_team_points', 'away_team_points']], hide_index = True)
 
-    st.success("✅ Matchups computed")
-    st.dataframe(week_matchups, use_container_width=True)
+    st.session_state['weekly_matchups'] = week_matchups
 
-# Save matchups (separate button so you can preview first)
-if "week_matchups_preview" in st.session_state and st.button("💾 Save Matchups"):
-    week_matchups = st.session_state["week_matchups_preview"].copy()
-    maybe_write(
-        label=f"save_weekly_matchups(week={selected_week})",
-        fn=db_utils.save_weekly_matchups,
-        preview_df=week_matchups,
-        week_matchups=week_matchups,
-        week=selected_week,
-        success_msg="✅ Matchups saved"
-    )
+if 'weekly_matchups' in st.session_state and st.button('💾 Save Matchup Results'):
 
-st.divider()
+    st.write(f"Processing week {selected_week}...")
+    week_matchups = st.session_state.weekly_matchups
+    teams_df = st.session_state.team_stats
 
-# ======================================================
-# UPDATE STANDINGS (DRY RUN SAFE)
-# ======================================================
-st.subheader("📊 Update Standings")
-
-if st.button("💾 Save Matchup Results"):
-    teams_df = db_utils.load_teams()
-    matchups_df = db_utils.load_matchups()
-    week_matchups = matchups_df[matchups_df["week"] == selected_week].copy()
-
-    # If points were saved into matchups table, these should exist
-    if "home_team_points" not in week_matchups.columns or "away_team_points" not in week_matchups.columns:
-        st.warning("Matchups table doesn't have saved points columns yet. Run + Save Matchups first.")
-        st.stop()
-
-    updated = teams_df.copy()
-
+    # We'll update each team cumulatively
     for _, row in week_matchups.iterrows():
-        home, away = row["home_team"], row["away_team"]
-        hp, ap = float(row["home_team_points"]), float(row["away_team_points"])
+        home_team = row["home_team"]
+        away_team = row["away_team"]
+        home_points = row["home_team_points"]
+        away_points = row["away_team_points"]
 
-        if hp > ap:
-            updated.loc[updated["team_name"] == home, "W"] += 1
-            updated.loc[updated["team_name"] == away, "L"] += 1
-        elif ap > hp:
-            updated.loc[updated["team_name"] == away, "W"] += 1
-            updated.loc[updated["team_name"] == home, "L"] += 1
+        # Get current team records
+        home_rec = teams_df.loc[teams_df["team_name"] == home_team].iloc[0]
+        away_rec = teams_df.loc[teams_df["team_name"] == away_team].iloc[0]
 
-        updated.loc[updated["team_name"] == home, ["PF", "PA"]] += [hp, ap]
-        updated.loc[updated["team_name"] == away, ["PF", "PA"]] += [ap, hp]
+        # Extract current stats
+        home_W, home_L, home_PF, home_PA = home_rec["W"], home_rec["L"], home_rec["PF"], home_rec["PA"]
+        away_W, away_L, away_PF, away_PA = away_rec["W"], away_rec["L"], away_rec["PF"], away_rec["PA"]
 
-    updated = updated.sort_values(["W", "L", "PF"], ascending=[False, True, False]).reset_index(drop=True)
-    updated["Place"] = range(1, len(updated) + 1)
+        # Update PF/PA
+        home_PF += home_points
+        home_PA += away_points
+        away_PF += away_points
+        away_PA += home_points
 
-    st.write("Preview updated standings:")
-    st.dataframe(updated, use_container_width=True)
+        # Determine winner/loser
+        if home_points > away_points:
+            home_W += 1
+            away_L += 1
+        elif away_points > home_points:
+            away_W += 1
+            home_L += 1
 
-    if DRY_RUN:
-        st.info("DRY RUN: would update team records in database (skipped).")
-    else:
-        for _, r in updated.iterrows():
-            db_utils.update_team_record(
-                r["team_name"],
-                int(r["W"]),
-                int(r["L"]),
-                float(r["PF"]),
-                float(r["PA"]),
-                int(r["Place"]),
-            )
-        st.success(f"✅ Week {selected_week} processed successfully!")
+        # ✅ Update local dataframe
+        teams_df.loc[teams_df["team_name"] == home_team, ["W", "L", "PF", "PA"]] = [home_W, home_L, home_PF, home_PA]
+        teams_df.loc[teams_df["team_name"] == away_team, ["W", "L", "PF", "PA"]] = [away_W, away_L, away_PF, away_PA]
+
+    teams_df = teams_df.sort_values(by=["W", "L", "PF"], ascending=[False, True, False]).reset_index(drop=True)
+    teams_df["Place"] = range(1, len(teams_df) + 1)
+
+    # --- Push all team updates once ---
+    for _, row in teams_df.iterrows():
+        db_utils.update_team_record(
+            row["team_name"],
+            W=int(row["W"]),
+            L=int(row["L"]),
+            PF=float(row["PF"]),
+            PA=float(row["PA"]),
+            Place=int(row["Place"])
+        )
+
+    st.success(f"✅ Week {selected_week} processed successfully!")
 
 st.divider()
+st.subheader('🏁 Run mid-week scoring')
 
-# ======================================================
-# OFF-WEEK UPDATE (DRY RUN SAFE)
-# ======================================================
-st.subheader("🏁 Run off-week")
+if st.button('🏁 Run mid-week scoring'):
 
-if st.button("🏁 Run off-week"):
-    teams = get_team_names()
+    coll_teams = get_team_names()
     current_cum = pd.DataFrame()
 
-    for team in teams:
+    for team in coll_teams.Name:
         try:
-            current_cum = pd.concat([current_cum, get_current_data(team[:-1])])
+            team_points = get_current_data(team[:-1])
+            current_cum = pd.concat([current_cum, team_points])
         except Exception as e:
-            st.warning(f"Skipping {team}: {e}")
+            st.warning(f"Skipping team {team[:-1]}: {e}")
 
-    st.write("Preview (first 50) of cumulative stats that would be saved to last_week_stats:")
-    st.dataframe(current_cum.reset_index().head(50), use_container_width=True)
+    db_utils.save_last_week_stats(current_cum)
 
-    maybe_write(
-        label="save_last_week_stats(current_cum)",
-        fn=db_utils.save_last_week_stats,
-        preview_df=current_cum.reset_index(),
-        df=current_cum,
-        success_msg="✅ Updated stats between weeks."
-    )
+    st.success(f"✅ Updated stats between weeks.")
