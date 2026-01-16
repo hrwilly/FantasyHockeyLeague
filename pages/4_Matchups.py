@@ -15,7 +15,7 @@ matchups_df = (
         .merge(managers.rename(columns={"team_name": "away_team", "manager": "manager_2"}), on="away_team")
     )
 
-selected_week = st.selectbox("Select week", sorted(matchups_df["week"].unique()), 8)
+selected_week = st.selectbox("Select week", sorted(matchups_df["week"].unique()), 9)
 week_matchups = matchups_df[matchups_df["week"] == selected_week].copy()
 week_rosters = rosters_df[rosters_df['week'] == selected_week]
 week_points = points[points['Week'] == selected_week]

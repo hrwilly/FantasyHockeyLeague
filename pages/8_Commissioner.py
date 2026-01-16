@@ -278,7 +278,7 @@ if st.button('🏁 Run mid-week scoring'):
     coll_teams = get_team_names()
     current_cum = pd.DataFrame()
 
-    for team in coll_teams.Name:
+    for team in coll_teams:
         try:
             team_points = get_current_data(team[:-1])
             current_cum = pd.concat([current_cum, team_points])
