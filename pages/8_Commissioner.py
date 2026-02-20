@@ -7,7 +7,7 @@ st.title("🏆 Commissioner Tools")
 # ======================================================
 # WEEK / DAY SELECTION
 # ======================================================
-selected_week = st.selectbox("Select Week", list(range(1, 16)))
+selected_week = st.selectbox("Select Week", list(range(1, 17)))
 selected_day = st.selectbox("Select Day", list(range(1, 5)))
 
 st.session_state["selected_week"] = selected_week
