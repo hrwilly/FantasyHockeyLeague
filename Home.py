@@ -37,11 +37,15 @@ for stat, points in scoring:
 st.subheader("Rules:")
 
 st.markdown("""
+- $20 entry fee to be paid before opening night.
+- First place regular season wins $20.
+- Playoff runner up wins $60.
+- Playoff champion wins $160.
 - One lineup set for the entire weekend.
 - Matchups will be considered for games Thursday through Sunday. No Mon, Tues, Wed games will count.
-- We will not play every weekend to account for the time the colleges don't play. The weeks we will not play are Winter break: 12/11-12/14, 12/18-12/21, 12/25-12/28, 1/1-1/4.
-- Playoffs will be top 6 teams. First place and second place get a first round bye. First week of playoffs is 2/12-2/15. Championship matchup is 2/26-3/1.
-- Winner will get choice of Frozen Four merch in Vegas!
+- Exhibition matches do not count towards fantasy points.
+- We will pause the fantasy season during winter break. We will not play 12/17-1/3
+- Playoffs will be top 6 teams. First place and second place get a first round bye. First week of playoffs is 2/11-2/14. Championship matchup is 2/25-2/28.
 - Whoever drafts the Hobey Baker winner will get a Hobey Baker puck.
-- DO NOT EDIT ANYONE ELSE'S TEAM PLEASE. We'll play honor system.
+- DO NOT EDIT ANYONE ELSE'S TEAM PLEASE. We'll play honor system. -- may add in usernames/passwords. TBD.
 """)
