@@ -47,5 +47,5 @@ st.markdown("""
 - We will pause the fantasy season during winter break. We will not play 12/17-1/3
 - Playoffs will be top 6 teams. First place and second place get a first round bye. First week of playoffs is 2/11-2/14. Championship matchup is 2/25-2/28.
 - Whoever drafts the Hobey Baker winner will get a Hobey Baker puck.
-- DO NOT EDIT ANYONE ELSE'S TEAM PLEASE. We'll play honor system. -- may add in usernames/passwords. TBD.
+- DO NOT EDIT ANYONE ELSE'S TEAM PLEASE. We'll play honor system. May add in usernames/passwords. TBD.
 """)
