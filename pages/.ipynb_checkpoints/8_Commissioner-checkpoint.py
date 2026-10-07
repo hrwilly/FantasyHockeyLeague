@@ -7,7 +7,7 @@ st.title("🏆 Commissioner Tools")
 # ======================================================
 # WEEK / DAY SELECTION
 # ======================================================
-selected_week = st.selectbox("Select Week", list(range(1, 16)))
+selected_week = st.selectbox("Select Week", list(range(1, 17)))
 selected_day = st.selectbox("Select Day", list(range(1, 5)))
 
 st.session_state["selected_week"] = selected_week
@@ -38,7 +38,7 @@ def get_team_names():
     return teams.tolist()
 
 def get_current_data(team):
-    url = f"https://collegehockeyinc.com/teams/{team}/stats26-overall.php"
+    url = f"https://collegehockeyinc.com/teams/{team}/stats27-overall.php"
     tables = pd.read_html(url)
 
     offense = tables[0]["Scoring"].copy()
