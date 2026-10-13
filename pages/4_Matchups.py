@@ -18,7 +18,14 @@ matchups_df = (
 selected_week = st.selectbox("Select week", sorted(matchups_df["week"].unique()), 0)
 week_matchups = matchups_df[matchups_df["week"] == selected_week].copy()
 week_rosters = rosters_df[rosters_df['week'] == selected_week]
-week_points = points[points['Week'] == selected_week]
+if points.empty:
+    week_points = pd.DataFrame(
+        columns=["Name", "team", "Week", "FantasyPoints"]
+    )
+else:
+    week_points = points[
+        points["Week"] == selected_week
+    ]
 
 weekly = points[points['Week'] == selected_week][['Name', 'team', 'FantasyPoints', 'Week']]
 weekly_total = weekly.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
