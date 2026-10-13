@@ -1,6 +1,5 @@
 import streamlit as st
 import db_utils
-import pandas as pd
 
 st.title("📅 Matchups")
 
@@ -19,36 +18,36 @@ matchups_df = (
 selected_week = st.selectbox("Select week", sorted(matchups_df["week"].unique()), 0)
 week_matchups = matchups_df[matchups_df["week"] == selected_week].copy()
 week_rosters = rosters_df[rosters_df['week'] == selected_week]
-# Filter points for the selected week
-if points.empty or "Week" not in points.columns:
-    weekly = pd.DataFrame(
-        columns=["Name", "team", "Week", "FantasyPoints"]
-    )
-else:
+# Initialize points for every roster entry.
+# This allows the Matchups page to work before scoring data exists.
+week_rosters["points"] = 0.0
+
+# Calculate player points only when scoring data is available.
+required_columns = {"Week", "Name", "team", "FantasyPoints"}
+
+if not points.empty and required_columns.issubset(points.columns):
     weekly = points.loc[
         points["Week"] == selected_week,
-        ["Name", "team", "Week", "FantasyPoints"]
+        ["Name", "team", "FantasyPoints"]
     ].copy()
 
-# Calculate player totals
-weekly_total = weekly.pivot_table(
-    columns="Week",
-    index=["Name", "team"],
-    values="FantasyPoints",
-    aggfunc="sum",
-    fill_value=0
-)
+    weekly_total = (
+        weekly.groupby(["Name", "team"], as_index=False)["FantasyPoints"]
+        .sum()
+        .rename(columns={
+            "Name": "player_name",
+            "FantasyPoints": "points"
+        })
+    )
 
-weekly_total["points"] = round(weekly_total.sum(axis=1), 1)
+    # Merge actual scores onto the roster.
+    week_rosters = week_rosters.drop(columns=["points"]).merge(
+        weekly_total,
+        on=["player_name", "team"],
+        how="left"
+    )
 
-weekly_total = (
-    weekly_total.reset_index()[["Name", "team", "points"]]
-)
-
-if len(week_points) != 0:
-    week_rosters = week_rosters.merge(weekly_total.rename(columns = {'Name' : 'player_name'}), on = ['player_name', 'team'], how = 'left')
-else:
-    week_rosters['points'] = [0] * len(week_rosters)
+    week_rosters["points"] = week_rosters["points"].fillna(0.0)
 
 # Initialize new columns
 week_matchups.loc[:, "away_team_points"] = 0.0
