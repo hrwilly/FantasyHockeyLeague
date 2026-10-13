@@ -267,78 +267,21 @@ def swap_lineup_state(team_name, player_out, player_in):
      .eq("player_name", player_in) \
      .execute()
 
-
 def lock_weekly_rosters(week):
-    # Load lineup assignments
-    resp = (
-        supabase.table("lineup_state")
-        .select("*")
-        .execute()
-    )
+    resp = supabase.table("lineup_state").select("*").execute()
     lineup = resp.data
 
     if not lineup:
         return
 
-    # Load player master data
-    players_resp = (
-        supabase.table("players")
-        .select('"Name", "Pos.", team')
-        .execute()
-    )
-    players_df = pd.DataFrame(players_resp.data)
-
-    if players_df.empty:
-        raise ValueError("The players table is empty; cannot lock lineups.")
-
-    # Build a lookup by player name
-    player_lookup = (
-        players_df.drop_duplicates(subset=["Name"])
-        .set_index("Name")
-        .to_dict(orient="index")
-    )
-
-    locked = []
-
-    for row in lineup:
-        player_name = row.get("player_name")
-        player_info = player_lookup.get(player_name)
-
-        if player_info is None:
-            raise ValueError(
-                f"Player '{player_name}' was not found in the players table. "
-                "No lineups were locked."
-            )
-
-        # Preserve lineup fields and explicitly populate player metadata
-        locked_row = {
-            **row,
-            "week": week,
-            "Pos.": player_info.get("Pos."),
-            "team": player_info.get("team"),
-        }
-
-        locked.append(locked_row)
-
-    # Validate before modifying active_roster
-    missing_metadata = [
-        row["player_name"]
-        for row in locked
-        if pd.isna(row.get("Pos."))
-        or pd.isna(row.get("team"))
-    ]
-
-    if missing_metadata:
-        raise ValueError(
-            "Cannot lock lineups because position or college team is missing "
-            f"for: {', '.join(missing_metadata)}"
-        )
-
-    # Replace this week's locked rosters
     supabase.table("active_roster").delete().eq("week", week).execute()
 
-    supabase.table("active_roster").insert(locked).execute()
+    locked = [
+        {**row, "week": week}
+        for row in lineup
+    ]
 
+    supabase.table("active_roster").insert(locked).execute()
 
 def add_drop_player(
     team_name,
