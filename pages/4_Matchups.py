@@ -19,19 +19,31 @@ matchups_df = (
 selected_week = st.selectbox("Select week", sorted(matchups_df["week"].unique()), 0)
 week_matchups = matchups_df[matchups_df["week"] == selected_week].copy()
 week_rosters = rosters_df[rosters_df['week'] == selected_week]
-if points.empty:
-    week_points = pd.DataFrame(
+# Filter points for the selected week
+if points.empty or "Week" not in points.columns:
+    weekly = pd.DataFrame(
         columns=["Name", "team", "Week", "FantasyPoints"]
     )
 else:
-    week_points = points[
-        points["Week"] == selected_week
-    ]
+    weekly = points.loc[
+        points["Week"] == selected_week,
+        ["Name", "team", "Week", "FantasyPoints"]
+    ].copy()
 
-weekly = points[points['Week'] == selected_week][['Name', 'team', 'FantasyPoints', 'Week']]
-weekly_total = weekly.pivot_table(columns='Week', index=['Name','team'], values='FantasyPoints', aggfunc='sum')
-weekly_total['points'] = round(weekly_total.sum(axis=1), 1)
-weekly_total = weekly_total.reset_index()[['Name', 'team', 'points']]
+# Calculate player totals
+weekly_total = weekly.pivot_table(
+    columns="Week",
+    index=["Name", "team"],
+    values="FantasyPoints",
+    aggfunc="sum",
+    fill_value=0
+)
+
+weekly_total["points"] = round(weekly_total.sum(axis=1), 1)
+
+weekly_total = (
+    weekly_total.reset_index()[["Name", "team", "points"]]
+)
 
 if len(week_points) != 0:
     week_rosters = week_rosters.merge(weekly_total.rename(columns = {'Name' : 'player_name'}), on = ['player_name', 'team'], how = 'left')
