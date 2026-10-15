@@ -38,7 +38,7 @@ def get_team_names():
     return teams.tolist()
 
 def get_current_data(team):
-    url = f"https://collegehockeyinc.com/teams/{team}/stats26-overall.php"
+    url = f"https://collegehockeyinc.com/teams/{team}/stats27-overall.php"
     tables = pd.read_html(url)
 
     offense = tables[0]["Scoring"].copy()
